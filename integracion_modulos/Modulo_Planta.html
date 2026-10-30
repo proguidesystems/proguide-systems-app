@@ -1,0 +1,350 @@
+<script>
+let DATOS_PLANTA = [];
+
+function renderModuloPlanta() {
+    const container = document.getElementById("modulosContainer");
+    container.innerHTML = `
+        <div class="flex flex-col gap-6">
+            <div class="flex items-center justify-between">
+                <div>
+                    <h2 class="text-xl font-black text-slate-900 dark:text-white flex items-center gap-2">
+                        <i data-lucide="factory" class="w-6 h-6 text-sky-500"></i> Control de Líneas y Producción
+                    </h2>
+                    <p class="text-xs text-slate-500 dark:text-slate-400 mt-1">Órdenes de producción, inventario en piso y estados de pedidos.</p>
+                </div>
+                <button onclick="cargarPlantaListado()" class="bg-sky-600 hover:bg-sky-700 text-white font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-2 shadow-md transition">
+                    <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> Actualizar
+                </button>
+            </div>
+            <div id="plantaData">
+                <div class="text-center py-20">
+                    <div class="inline-block w-8 h-8 border-4 border-sky-600 border-t-transparent rounded-full animate-spin"></div>
+                    <p class="text-xs text-slate-500 mt-3 font-bold">Cargando líneas y órdenes...</p>
+                </div>
+            </div>
+        </div>
+    `;
+    lucide.createIcons();
+    cargarPlantaListado();
+}
+
+function cargarPlantaListado() {
+    if (typeof google === "undefined" || !google.script) return;
+    google.script.run
+        .withSuccessHandler(res => {
+            if (!res.ok) {
+                document.getElementById("plantaData").innerHTML = `<p class="text-rose-500 font-bold">Error: ${res.error}</p>`;
+                return;
+            }
+            DATOS_PLANTA = res.lineas || [];
+            renderListadoPlanta();
+        })
+        .withFailureHandler(err => {
+            document.getElementById("plantaData").innerHTML = `<p class="text-rose-500 font-bold">Error: ${err.message}</p>`;
+        })
+        .obtenerDatosPlantaListado(SESION.cedula);
+}
+
+function renderListadoPlanta() {
+    const container = document.getElementById("plantaData");
+    
+    if (DATOS_PLANTA.length === 0) {
+        container.innerHTML = `<div class="glass-panel p-10 text-center rounded-2xl border border-slate-300 dark:border-pgs-border text-slate-500 font-bold">No hay líneas activas configuradas.</div>`;
+        return;
+    }
+
+    let html = `<div class="flex flex-col gap-6">`;
+
+    DATOS_PLANTA.forEach(l => {
+        const totalCarga = l.ops
+            .filter(op => ["Pendiente", "En proceso"].includes(op.estado))
+            .reduce((sum, op) => sum + parseFloat(op.cantidad_planeada || 0), 0);
+            
+        const porcentajeCarga = l.capacidad > 0 ? Math.min(100, Math.round((totalCarga / l.capacidad) * 100)) : 0;
+        const colorBarra = porcentajeCarga > 90 ? 'bg-rose-500' : porcentajeCarga > 70 ? 'bg-amber-500' : 'bg-emerald-500';
+
+        html += `
+            <div class="glass-panel bg-white/60 dark:bg-slate-900/60 rounded-2xl border border-slate-300 dark:border-pgs-border overflow-hidden shadow-xl">
+                <div class="p-4 bg-slate-100/50 dark:bg-slate-800/50 border-b border-slate-300 dark:border-pgs-border flex flex-wrap items-center justify-between gap-4">
+                    <div class="flex items-center gap-3">
+                        <div class="p-2 bg-sky-100 text-sky-700 rounded-lg"><i data-lucide="git-commit" class="w-5 h-5"></i></div>
+                        <div>
+                            <h3 class="font-bold text-lg text-slate-900 dark:text-white uppercase">${l.linea}</h3>
+                            <p class="text-[10px] text-slate-500 font-bold">Capacidad: ${formatNum(l.capacidad)} ${l.um}</p>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center gap-4">
+                        <div class="text-right hidden sm:block">
+                            <p class="text-[10px] font-black uppercase text-slate-500">Carga de Planta</p>
+                            <p class="text-sm font-bold text-sky-600 dark:text-pgs-cyan">${formatNum(totalCarga)} / ${formatNum(l.capacidad)} ${l.um}</p>
+                        </div>
+                        <div class="w-32 h-3 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                            <div class="h-full ${colorBarra} rounded-full" style="width: ${porcentajeCarga}%"></div>
+                        </div>
+                        <button onclick="abrirModalNovedadLinea('${l.linea}')" class="p-2 bg-amber-100 text-amber-700 hover:bg-amber-200 rounded-lg text-xs font-bold flex items-center gap-1 transition" title="Reportar Paro o Novedad">
+                            <i data-lucide="alert-triangle" class="w-4 h-4"></i> Novedad
+                        </button>
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-slate-50 dark:bg-slate-800/30 border-b border-slate-200 dark:border-slate-700 text-slate-500 font-black uppercase tracking-wider text-[10px]">
+                            <tr>
+                                <th class="p-3">Entrega</th>
+                                <th class="p-3">OP / Pedido</th>
+                                <th class="p-3">SKU / Desc</th>
+                                <th class="p-3 text-right">Solicitado</th>
+                                <th class="p-3 text-right text-purple-600 dark:text-purple-400">En Inv. PT</th>
+                                <th class="p-3 text-right text-emerald-600 dark:text-emerald-400">En OP</th>
+                                <th class="p-3 text-right text-rose-600 dark:text-rose-400">Falta</th>
+                                <th class="p-3">Estado</th>
+                                <th class="p-3 text-center">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-200 dark:divide-slate-700/50">
+                            ${l.ops.length === 0 ? `<tr><td colspan="9" class="p-6 text-center text-slate-400 font-bold">No hay órdenes registradas en esta línea</td></tr>` : 
+                            l.ops.map(op => {
+                                const esPendiente = op.estado === "Pendiente";
+                                const esProceso = op.estado === "En proceso";
+                                const esCompletada = op.estado === "Completada";
+                                
+                                let estadoColor = esPendiente ? 'bg-amber-100 text-amber-800' : esProceso ? 'bg-sky-100 text-sky-800' : 'bg-emerald-100 text-emerald-800';
+
+                                return `
+                                <tr class="hover:bg-slate-100/50 dark:hover:bg-slate-800/40 transition-colors">
+                                    <td class="p-3">
+                                        <div class="font-bold text-slate-800 dark:text-slate-200 font-mono text-[11px]">${op.fecha_entrega || '-'}</div>
+                                    </td>
+                                    <td class="p-3">
+                                        <div class="font-mono font-bold text-sky-600 dark:text-pgs-cyan text-sm">${op.numero_op}</div>
+                                        <div class="text-[10px] text-slate-500">${op.pedido}</div>
+                                    </td>
+                                    <td class="p-3">
+                                        <div class="font-bold text-slate-800 dark:text-white">${op.sku}</div>
+                                        <div class="text-[10px] text-slate-500 truncate max-w-[150px]">${op.descripcion}</div>
+                                    </td>
+                                    
+                                    <td class="p-3 text-right font-bold text-slate-700 dark:text-slate-300">
+                                        ${formatNum(op.cant_solicitada)} ${op.unidad}
+                                    </td>
+                                    <td class="p-3 text-right font-bold text-purple-600 dark:text-purple-400 bg-purple-50/30 dark:bg-purple-500/10">
+                                        ${formatNum(op.inv_pt)} ${op.unidad}
+                                    </td>
+                                    <td class="p-3 text-right font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50/30 dark:bg-emerald-500/10">
+                                        ${formatNum(op.cantidad_planeada)} ${op.unidad}
+                                    </td>
+                                    <td class="p-3 text-right font-black ${op.falta_producir > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-slate-400'} bg-rose-50/30 dark:bg-rose-500/10">
+                                        ${formatNum(op.falta_producir)} ${op.unidad}
+                                    </td>
+
+                                    <td class="p-3">
+                                        <span class="px-2 py-1 rounded text-[10px] font-black ${estadoColor}">${op.estado}</span>
+                                        ${esProceso && op.ultimo_proceso ? `<div class="text-[10px] text-sky-600 dark:text-sky-400 font-bold mt-1">Paso: ${op.ultimo_proceso}</div>` : ''}
+                                        ${esCompletada && op.tiene_no_conforme ? `<div class="text-[9px] text-rose-600 dark:text-rose-400 font-bold mt-1">⚠️ Con No Conformes</div>` : ''}
+                                    </td>
+                                    <td class="p-3 flex items-center justify-center gap-2">
+                                        ${esPendiente ? `
+                                            <button onclick="iniciarOP('${op.numero_op}')" class="bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-sm transition">Iniciar</button>
+                                        ` : ''}
+                                        ${esProceso ? `
+                                            <button onclick="abrirModalProceso('${op.numero_op}', '${op.linea}', '${l.procesos || ''}')" class="bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-white px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-sm transition">Proceso</button>
+                                            <button onclick="abrirModalFinalizar('${op.numero_op}', '${op.cantidad_planeada}')" class="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-sm transition">Finalizar</button>
+                                        ` : ''}
+                                        ${esCompletada ? `<span class="text-slate-400 font-bold text-[10px]">✔ Listo</span>` : ''}
+                                    </td>
+                                </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+    });
+
+    html += `</div>`;
+    container.innerHTML = html;
+    lucide.createIcons();
+}
+
+function formatNum(n) { return n == null || isNaN(n) ? '0' : Number(n).toLocaleString('es-CO'); }
+
+function iniciarOP(numeroOP) {
+    google.script.run
+        .withSuccessHandler(res => {
+            if (!res.ok) return mostrarAlerta(res.error, true);
+            mostrarAlerta(res.mensaje);
+            cargarPlantaListado();
+        })
+        .cambiarEstadoOP(numeroOP, "En proceso", SESION.cedula);
+}
+
+function abrirModalProceso(numeroOP, linea, procesosStr) {
+    const listaProcesos = procesosStr ? procesosStr.split(',').map(p => p.trim()) : ['Pesaje', 'Mezcla', 'Envasado', 'Etiquetado'];
+    const opcionesHTML = listaProcesos.map(p => `<option value="${p}">${p}</option>`).join('');
+
+    const overlay = document.createElement("div");
+    overlay.className = "fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4";
+    overlay.innerHTML = `
+        <div class="glass-panel bg-white/90 dark:bg-pgs-card/90 border border-sky-300/50 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div class="flex items-center gap-3 mb-2">
+                <div class="p-2 bg-sky-100 text-sky-600 rounded-lg"><i data-lucide="settings" class="w-5 h-5"></i></div>
+                <div>
+                    <h4 class="text-base font-bold text-slate-900 dark:text-white">Registrar Proceso</h4>
+                    <p class="text-[11px] text-slate-500">${numeroOP}</p>
+                </div>
+            </div>
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-bold mb-1">Seleccione el Proceso *</label>
+                    <select id="proc_nombre" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-semibold">
+                        ${opcionesHTML}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold mb-1">Observaciones del Proceso</label>
+                    <textarea id="proc_obs" rows="2" placeholder="Opcional..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-semibold"></textarea>
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button onclick="this.closest('.fixed').remove()" class="px-4 py-2 bg-slate-200 dark:bg-slate-800 rounded-xl text-xs font-bold">Cancelar</button>
+                <button onclick="guardarProceso('${numeroOP}', '${linea}')" class="px-4 py-2 bg-sky-600 text-white rounded-xl text-xs font-bold">Guardar</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+    lucide.createIcons();
+}
+
+function guardarProceso(numeroOP, linea) {
+    const proceso = document.getElementById("proc_nombre").value;
+    const observaciones = document.getElementById("proc_obs").value.trim();
+    const datos = { numeroOP, linea, proceso, estado: "Completado", observaciones };
+    google.script.run
+        .withSuccessHandler(res => {
+            if (!res.ok) return mostrarAlerta(res.error, true);
+            document.querySelector(".fixed.z-50").remove();
+            mostrarAlerta(res.mensaje);
+            cargarPlantaListado();
+        })
+        .registrarProcesoOP(datos, SESION.cedula);
+}
+
+function abrirModalFinalizar(numeroOP, cantPlaneada) {
+    const overlay = document.createElement("div");
+    overlay.className = "fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4";
+    overlay.innerHTML = `
+        <div class="glass-panel bg-white/90 dark:bg-pgs-card/90 border border-emerald-300/50 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div class="flex items-center gap-3 mb-2">
+                <div class="p-2 bg-emerald-100 text-emerald-600 rounded-lg"><i data-lucide="check-circle" class="w-5 h-5"></i></div>
+                <div>
+                    <h4 class="text-base font-bold text-slate-900 dark:text-white">Finalizar OP</h4>
+                    <p class="text-[11px] text-slate-500">${numeroOP}</p>
+                </div>
+            </div>
+            
+            <div class="p-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl mb-2">
+                <label class="block text-xs font-bold mb-1">Cantidad BUENA Producida *</label>
+                <input type="number" id="fin_cantidad_buena" value="${cantPlaneada}" class="w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-600 rounded-lg px-3 py-2 text-sm font-black text-emerald-600">
+                <p class="text-[10px] text-slate-500 mt-1">Esta cantidad irá al Inventario PT.</p>
+            </div>
+
+            <div class="p-3 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 rounded-xl mb-2">
+                <label class="block text-xs font-bold text-rose-700 dark:text-rose-400 mb-1">Cantidad NO CONFORME</label>
+                <input type="number" id="fin_cantidad_mala" value="0" class="w-full bg-white dark:bg-slate-800 border border-rose-300 dark:border-rose-500/50 rounded-lg px-3 py-2 text-sm font-black text-rose-600" oninput="toggleMotivoMala()">
+                <div id="box_motivo_mala" class="hidden mt-2">
+                    <input type="text" id="fin_motivo_mala" placeholder="Motivo del No Conforme (Obligatorio)" class="w-full bg-white dark:bg-slate-800 border border-rose-300 dark:border-rose-500/50 rounded-lg px-3 py-2 text-xs">
+                </div>
+            </div>
+
+            <div class="flex justify-end gap-2 pt-2">
+                <button onclick="this.closest('.fixed').remove()" class="px-4 py-2 bg-slate-200 dark:bg-slate-800 rounded-xl text-xs font-bold">Cancelar</button>
+                <button onclick="confirmarFinalizar('${numeroOP}')" class="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold">Confirmar y Enviar a PT</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+    lucide.createIcons();
+}
+
+function toggleMotivoMala() {
+    const cantMala = parseFloat(document.getElementById("fin_cantidad_mala").value) || 0;
+    document.getElementById("box_motivo_mala").classList.toggle("hidden", cantMala <= 0);
+}
+
+function confirmarFinalizar(numeroOP) {
+    const cantBuena = parseFloat(document.getElementById("fin_cantidad_buena").value) || 0;
+    const cantMala = parseFloat(document.getElementById("fin_cantidad_mala").value) || 0;
+    const motivoMala = document.getElementById("fin_motivo_mala")?.value.trim() || "";
+
+    if (cantBuena < 0 || cantMala < 0) return mostrarAlerta("Las cantidades no pueden ser negativas", true);
+    if (cantMala > 0 && !motivoMala) return mostrarAlerta("Escriba el motivo del No Conforme", true);
+
+    const datos = { numeroOP, cantidadReal: cantBuena, cantidadNoConforme: cantMala, motivoNoConforme: motivoMala };
+
+    google.script.run
+        .withSuccessHandler(res => {
+            if (!res.ok) return mostrarAlerta(res.error, true);
+            document.querySelector(".fixed.z-50").remove();
+            mostrarAlerta(res.mensaje);
+            cargarPlantaListado();
+        })
+        .finalizarOPyEnviarPT(datos, SESION.cedula);
+}
+
+function abrirModalNovedadLinea(linea) {
+    const overlay = document.createElement("div");
+    overlay.className = "fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4";
+    overlay.innerHTML = `
+        <div class="glass-panel bg-white/90 dark:bg-pgs-card/90 border border-amber-300/50 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div class="flex items-center gap-3 mb-2">
+                <div class="p-2 bg-amber-100 text-amber-600 rounded-lg"><i data-lucide="alert-triangle" class="w-5 h-5"></i></div>
+                <div>
+                    <h4 class="text-base font-bold text-slate-900 dark:text-white">Reportar Novedad en Línea</h4>
+                    <p class="text-[11px] text-slate-500">${linea}</p>
+                </div>
+            </div>
+            
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-bold mb-1">Tipo de Novedad *</label>
+                    <select id="nov_tipo" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-semibold">
+                        <option value="Paro por Mantenimiento">Paro por Mantenimiento</option>
+                        <option value="Paro por Limpieza">Paro por Limpieza</option>
+                        <option value="Falta de Insumos">Falta de Insumos</option>
+                        <option value="Otro">Otro</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold mb-1">Descripción de la Novedad *</label>
+                    <textarea id="nov_desc" rows="3" placeholder="Describa el motivo del paro o novedad..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl px-3 py-2 text-xs font-semibold"></textarea>
+                </div>
+            </div>
+            <div class="flex justify-end gap-2 pt-2">
+                <button onclick="this.closest('.fixed').remove()" class="px-4 py-2 bg-slate-200 dark:bg-slate-800 rounded-xl text-xs font-bold">Cancelar</button>
+                <button onclick="guardarNovedadLinea('${linea}')" class="px-4 py-2 bg-amber-600 text-white rounded-xl text-xs font-bold">Reportar Novedad</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+    lucide.createIcons();
+}
+
+function guardarNovedadLinea(linea) {
+    const tipo = document.getElementById("nov_tipo").value;
+    const desc = document.getElementById("nov_desc").value.trim();
+    if (!desc) return mostrarAlerta("Escriba una descripción", true);
+
+    const datos = { tipo, descripcion: desc, linea };
+
+    google.script.run
+        .withSuccessHandler(res => {
+            if (!res.ok) return mostrarAlerta(res.error, true);
+            document.querySelector(".fixed.z-50").remove();
+            mostrarAlerta(res.mensaje);
+        })
+        .registrarNovedadOperacion(datos, SESION.cedula);
+}
+</script>

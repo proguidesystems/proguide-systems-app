@@ -1,0 +1,60 @@
+<style>
+    /* ==========================================
+       FONDOS TECNOLÓGICOS INDUSTRIALES
+       ========================================== */
+    .bg-tech-dark {
+        background-color: #030712;
+        background-image: 
+            radial-gradient(circle at 80% 20%, rgba(0, 210, 255, 0.15) 0%, transparent 40%),
+            radial-gradient(circle at 20% 80%, rgba(147, 51, 234, 0.15) 0%, transparent 40%),
+            url("data:image/svg+xml,%3Csvg width='120' height='120' viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='%2300D2FF' stroke-width='1' stroke-opacity='0.15'%3E%3Cpath d='M0 30h30v30h30v-30h30M120 30h-30v30h-30v-30h-30'/%3E%3Cpath d='M30 0v30h30v30h30v-30h30M30 120v-30h30v-30h30v30h30'/%3E%3Ccircle cx='30' cy='30' r='3' fill='%2300D2FF' fill-opacity='0.5'/%3E%3Ccircle cx='90' cy='30' r='3' fill='%2300D2FF' fill-opacity='0.5'/%3E%3Ccircle cx='30' cy='90' r='3' fill='%2300D2FF' fill-opacity='0.5'/%3E%3Ccircle cx='90' cy='90' r='3' fill='%2300D2FF' fill-opacity='0.5'/%3E%3C/g%3E%3C/svg%3E");
+        background-size: 100% 100%, 100% 100%, 120px 120px;
+        background-attachment: fixed;
+    }
+
+    .bg-tech-light {
+        background-color: #F4F7FB;
+        background-image: 
+            radial-gradient(circle at 80% 20%, rgba(2, 132, 199, 0.05) 0%, transparent 40%),
+            radial-gradient(circle at 20% 80%, rgba(16, 185, 129, 0.05) 0%, transparent 40%),
+            url("data:image/svg+xml,%3Csvg width='120' height='120' viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='%230284c7' stroke-width='1' stroke-opacity='0.1'%3E%3Cpath d='M0 30h30v30h30v-30h30M120 30h-30v30h-30v-30h-30'/%3E%3Cpath d='M30 0v30h30v30h30v-30h30M30 120v-30h30v-30h30v30h30'/%3E%3Ccircle cx='30' cy='30' r='2' fill='%230284c7' fill-opacity='0.3'/%3E%3Ccircle cx='90' cy='30' r='2' fill='%230284c7' fill-opacity='0.3'/%3E%3Ccircle cx='30' cy='90' r='2' fill='%230284c7' fill-opacity='0.3'/%3E%3Ccircle cx='90' cy='90' r='2' fill='%230284c7' fill-opacity='0.3'/%3E%3C/g%3E%3C/svg%3E");
+        background-size: 100% 100%, 100% 100%, 120px 120px;
+        background-attachment: fixed;
+    }
+
+    /* ==========================================
+       GLASSMORPHISM INDUSTRIAL (Efecto Cristal)
+       ========================================== */
+    .glass-panel {
+        backdrop-filter: blur(24px);
+        -webkit-backdrop-filter: blur(24px);
+        box-shadow: 
+            0 10px 40px -10px rgba(0, 0, 0, 0.4),
+            inset 0 1px 0 rgba(255, 255, 255, 0.1);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+
+    .dark .glass-panel {
+        border: 1px solid rgba(0, 210, 255, 0.25);
+        box-shadow: 
+            0 10px 40px -10px rgba(0, 0, 0, 0.8),
+            inset 0 1px 0 rgba(0, 210, 255, 0.2);
+    }
+
+    /* Scrollbar futurista */
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: linear-gradient(to bottom, #00D2FF, #2563EB); border-radius: 10px; border: 2px solid transparent; background-clip: content-box; }
+    ::-webkit-scrollbar-thumb:hover { background: #00D2FF; }
+
+    /* Tabs (Pestañas) */
+    .tab-btn { position: relative; padding: 12px 28px; font-size: 13px; font-weight: 900; text-transform: uppercase; letter-spacing: 0.05em; color: #64748b; border-bottom: 3px solid transparent; transition: all 0.3s; }
+    .tab-btn:hover { color: #0ea5e9; }
+    .tab-btn.active { color: #0284c7; border-bottom-color: #0284c7; background: linear-gradient(to top, rgba(2, 132, 199, 0.05), transparent); }
+    .dark .tab-btn { color: #94a3b8; }
+    .dark .tab-btn.active { color: #00D2FF; border-bottom-color: #00D2FF; background: linear-gradient(to top, rgba(0, 210, 255, 0.1), transparent); text-shadow: 0 0 15px rgba(0, 210, 255, 0.6); }
+
+    /* Animación sutil */
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    #modulosContainer { animation: fadeIn 0.4s ease-out; }
+</style>

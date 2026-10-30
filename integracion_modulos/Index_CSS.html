@@ -1,0 +1,99 @@
+<style>
+    /* ==========================================
+       FONDOS BASE INDUSTRIALES
+       ========================================== */
+    html, body {
+        min-height: 100vh;
+        width: 100%;
+        transition: background-color 0.3s ease, color 0.3s ease;
+    }
+
+    /* TEMA CLARO */
+    body {
+        background-color: #F1F5F9 !important;
+        background-image: 
+            radial-gradient(circle at 80% 20%, rgba(2, 132, 199, 0.08) 0%, transparent 40%),
+            radial-gradient(circle at 20% 80%, rgba(16, 185, 129, 0.08) 0%, transparent 40%),
+            url("data:image/svg+xml,%3Csvg width='120' height='120' viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='%230284c7' stroke-width='1' stroke-opacity='0.12'%3E%3Cpath d='M0 30h30v30h30v-30h30M120 30h-30v30h-30v-30h-30'/%3E%3Cpath d='M30 0v30h30v30h30v-30h30M30 120v-30h30v-30h30v30h30'/%3E%3Ccircle cx='30' cy='30' r='2' fill='%230284c7' fill-opacity='0.25'/%3E%3Ccircle cx='90' cy='30' r='2' fill='%230284c7' fill-opacity='0.25'/%3E%3Ccircle cx='30' cy='90' r='2' fill='%230284c7' fill-opacity='0.25'/%3E%3Ccircle cx='90' cy='90' r='2' fill='%230284c7' fill-opacity='0.25'/%3E%3C/g%3E%3C/svg%3E");
+        background-size: 100% 100%, 100% 100%, 120px 120px;
+        background-attachment: fixed;
+        color: #0F172A;
+    }
+
+    /* TEMA OSCURO OBLIGATORIO (HOMOGÉNEO) */
+    html.dark body, body.dark {
+        background-color: #030712 !important;
+        background-image: 
+            radial-gradient(circle at 80% 20%, rgba(0, 210, 255, 0.15) 0%, transparent 40%),
+            radial-gradient(circle at 20% 80%, rgba(147, 51, 234, 0.15) 0%, transparent 40%),
+            url("data:image/svg+xml,%3Csvg width='120' height='120' viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='%2300D2FF' stroke-width='1' stroke-opacity='0.15'%3E%3Cpath d='M0 30h30v30h30v-30h30M120 30h-30v30h-30v-30h-30'/%3E%3Cpath d='M30 0v30h30v30h30v-30h30M30 120v-30h30v-30h30v30h30'/%3E%3Ccircle cx='30' cy='30' r='3' fill='%2300D2FF' fill-opacity='0.5'/%3E%3Ccircle cx='90' cy='30' r='3' fill='%2300D2FF' fill-opacity='0.5'/%3E%3Ccircle cx='30' cy='90' r='3' fill='%2300D2FF' fill-opacity='0.5'/%3E%3Ccircle cx='90' cy='90' r='3' fill='%2300D2FF' fill-opacity='0.5'/%3E%3C/g%3E%3C/svg%3E") !important;
+        background-size: 100% 100%, 100% 100%, 120px 120px;
+        background-attachment: fixed;
+        color: #F8FAFC !important;
+    }
+
+    /* ==========================================
+       PANELES Y TARJETAS (MISMO TONO EN TODAS PARTES)
+       ========================================== */
+    .glass-panel {
+        backdrop-filter: blur(20px);
+        -webkit-backdrop-filter: blur(20px);
+        border-radius: 1rem;
+        transition: all 0.3s ease;
+    }
+
+    body:not(.dark) .glass-panel {
+        background-color: rgba(255, 255, 255, 0.85) !important;
+        border: 1px solid rgba(203, 213, 225, 0.8) !important;
+        box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.1);
+    }
+
+    html.dark .glass-panel {
+        background-color: rgba(15, 23, 42, 0.85) !important; /* Mismo #0F172A para todos */
+        border: 1px solid rgba(0, 210, 255, 0.25) !important;
+        box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(0, 210, 255, 0.2);
+    }
+
+    /* ==========================================
+       INPUTS Y SELECTORES HOMOGÉNEOS
+       ========================================== */
+    html.dark input, 
+    html.dark select, 
+    html.dark textarea {
+        background-color: #090D16 !important;
+        color: #FFFFFF !important;
+        border: 1px solid #1E293B !important;
+    }
+
+    html.dark input[readonly], 
+    html.dark input:disabled {
+        background-color: #1E293B !important;
+        color: #00D2FF !important;
+    }
+
+    /* Pestañas */
+    .tab-btn {
+        position: relative;
+        padding: 12px 24px;
+        font-size: 13px;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #94A3B8;
+        border-bottom: 3px solid transparent;
+        transition: all 0.25s;
+    }
+
+    .tab-btn:hover { color: #00D2FF; }
+    
+    .tab-btn.active {
+        color: #00D2FF !important;
+        border-bottom-color: #00D2FF !important;
+        background: linear-gradient(to top, rgba(0, 210, 255, 0.12), transparent);
+        text-shadow: 0 0 12px rgba(0, 210, 255, 0.6);
+    }
+
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #00D2FF; border-radius: 10px; }
+</style>

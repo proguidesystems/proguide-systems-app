@@ -1,0 +1,999 @@
+<script>
+let DATOS_CONSOLIDADOS = [];
+let INDICADORES_PLANTA = null;
+let LINEAS_MAQUINAS = [];
+let PEDIDOS_PROG_EXPANDIDOS = new Set(); 
+let TAB_ACTIVA = "consolidada";
+let DATOS_CAPACIDAD = null;
+let SEMANA_ACTUAL = null;
+
+function renderModuloProgramacion() {
+    const container = document.getElementById("modulosContainer");
+
+    if (!SEMANA_ACTUAL) {
+        const hoy = new Date();
+        const dia = hoy.getDay();
+        const diff = dia === 0 ? -6 : 1 - dia;
+        const lunes = new Date(hoy);
+        lunes.setDate(hoy.getDate() + diff);
+        SEMANA_ACTUAL = formatearFechaInput(lunes);
+    }
+
+    container.innerHTML = `
+        <div class="flex gap-2 mb-4">
+            <button onclick="cambiarTabProgramacion('consolidada')" class="px-4 py-2.5 text-xs font-black uppercase tracking-wider rounded-xl transition ${TAB_ACTIVA === 'consolidada' ? 'bg-sky-600 text-white shadow-md' : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700'}">
+                <i data-lucide="clipboard-list" class="w-4 h-4 inline-block mr-1 -mt-0.5"></i>
+                Vista Consolidada
+            </button>
+            <button onclick="cambiarTabProgramacion('capacidad')" class="px-4 py-2.5 text-xs font-black uppercase tracking-wider rounded-xl transition ${TAB_ACTIVA === 'capacidad' ? 'bg-sky-600 text-white shadow-md' : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-300 dark:hover:bg-slate-700'}">
+                <i data-lucide="bar-chart-3" class="w-4 h-4 inline-block mr-1 -mt-0.5"></i>
+                Capacidad Planta
+            </button>
+        </div>
+        <div id="contenidoProgramacion"></div>
+    `;
+    lucide.createIcons();
+
+    if (TAB_ACTIVA === "consolidada") {
+        renderVistaConsolidada();
+    } else {
+        renderVistaCapacidad();
+    }
+}
+
+function cambiarTabProgramacion(tab) {
+    TAB_ACTIVA = tab;
+    renderModuloProgramacion();
+}
+
+function formatearFechaInput(fecha) {
+    const año = fecha.getFullYear();
+    const mes = String(fecha.getMonth() + 1).padStart(2, "0");
+    const dia = String(fecha.getDate()).padStart(2, "0");
+    return `${año}-${mes}-${dia}`;
+}
+
+function formatearFechaCorta(fechaStr) {
+    if (!fechaStr) return "-";
+    try {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(fechaStr)) {
+            const partes = fechaStr.split("-");
+            return `${partes[2]}/${partes[1]}`;
+        }
+        return fechaStr;
+    } catch (e) { return fechaStr; }
+}
+
+function formatearHoraCorta(horaStr) {
+    if (!horaStr) return "-";
+    try {
+        const str = String(horaStr).trim();
+        if (/^\d{1,2}:\d{2}$/.test(str)) return str;
+        const d = new Date(str);
+        if (!isNaN(d.getTime())) {
+            const h = String(d.getHours()).padStart(2, "0");
+            const m = String(d.getMinutes()).padStart(2, "0");
+            return h + ":" + m;
+        }
+        return str;
+    } catch (e) { return horaStr; }
+}
+
+function minutosAHoras(min) {
+    if (!min || min === 0) return "0h";
+    const h = Math.round(min / 60 * 10) / 10;
+    return h + "h";
+}
+
+// ==========================================
+// VISTA CONSOLIDADA
+// ==========================================
+function renderVistaConsolidada() {
+    const container = document.getElementById("contenidoProgramacion");
+    const esAdmin = SESION.esAdmin === true;
+
+    container.innerHTML = `
+        <section class="glass-panel bg-white/70 dark:bg-pgs-card/60 border border-white/30 dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden w-full transition-all duration-300">
+            <div class="p-4 border-b border-slate-300 dark:border-pgs-border">
+                <div class="flex items-center justify-between flex-wrap gap-3 mb-3">
+                    <div class="flex items-center gap-3">
+                        <div class="p-2 bg-sky-100 dark:bg-pgs-cyan/10 rounded-xl text-sky-800 dark:text-pgs-cyan border border-sky-300 dark:border-sky-500/20">
+                            <i data-lucide="calendar-clock" class="w-5 h-5"></i>
+                        </div>
+                        <div>
+                            <h2 class="text-sm font-bold text-slate-900 dark:text-white">Vista Consolidada</h2>
+                            <p class="text-[10px] text-slate-600 dark:text-slate-400">Pedidos + Inventario + OPs + Novedades</p>
+                        </div>
+                    </div>
+
+                    <button onclick="cargarTodoConsolidado()" class="text-[10px] bg-slate-900 dark:bg-gradient-to-r dark:from-pgs-cyan dark:to-pgs-neon text-white dark:text-slate-950 font-black px-3 py-2 rounded-lg uppercase tracking-wider flex items-center gap-1.5 shadow-md cursor-pointer">
+                        <i data-lucide="refresh-cw" class="w-3 h-3"></i>
+                        <span>Recargar</span>
+                    </button>
+                </div>
+
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-2">
+                    <select id="filtroUrgencia" onchange="aplicarFiltros()" class="bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-lg px-2 py-1.5 text-[11px] font-semibold">
+                        <option value="">Todas las urgencias</option>
+                        <option value="Alta">Alta</option>
+                        <option value="Media">Media</option>
+                        <option value="Baja">Baja</option>
+                    </select>
+                    <select id="filtroEstadoProd" onchange="aplicarFiltros()" class="bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-lg px-2 py-1.5 text-[11px] font-semibold">
+                        <option value="">Todos los estados</option>
+                        <option value="Sin programar">Sin programar</option>
+                        <option value="Programado parcial">Programado parcial</option>
+                        <option value="Programado">Programado</option>
+                        <option value="En producción">En producción</option>
+                        <option value="Listo">Listo</option>
+                        <option value="Despachado">Despachado</option>
+                    </select>
+                    <select id="filtroPisoProducir" onchange="aplicarFiltros()" class="bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-lg px-2 py-1.5 text-[11px] font-semibold">
+                        <option value="">Piso / Producir</option>
+                        <option value="Piso">Solo Piso</option>
+                        <option value="Producir">Solo Producir</option>
+                    </select>
+                    ${esAdmin ? `
+                    <select id="filtroEmpresa" onchange="aplicarFiltros()" class="bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-lg px-2 py-1.5 text-[11px] font-semibold">
+                        <option value="">Todas las empresas</option>
+                    </select>
+                    ` : `
+                    <input type="text" id="busquedaTexto" onkeyup="aplicarFiltros()" placeholder="Buscar..." class="bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-lg px-2 py-1.5 text-[11px] font-semibold">
+                    `}
+                </div>
+                ${esAdmin ? `
+                <div class="grid grid-cols-1">
+                    <input type="text" id="busquedaTexto" onkeyup="aplicarFiltros()" placeholder="Buscar pedido, SKU, destinatario..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-lg px-2 py-1.5 text-[11px] font-semibold">
+                </div>
+                ` : ''}
+            </div>
+
+            <div class="overflow-y-auto" style="max-height: 75vh;">
+                <table class="w-full text-left" style="table-layout: auto;">
+                    <thead class="bg-slate-200/50 dark:bg-slate-900/50 backdrop-blur-lg sticky top-0 text-slate-700 dark:text-slate-400 font-black uppercase tracking-wider text-[10px] z-10">
+                        <tr>
+                            <th class="p-1.5 w-6"></th>
+                            <th class="p-1.5">Pedido</th>
+                            ${esAdmin ? '<th class="p-1.5">Empresa</th>' : ''}
+                            <th class="p-1.5">SKU · Desc.</th>
+                            <th class="p-1.5">Dest.</th>
+                            <th class="p-1.5 text-right">Cant.Sol.</th>
+                            <th class="p-1.5 text-right">Inv.PT</th>
+                            <th class="p-1.5 text-right">Prog/Piso</th>
+                            <th class="p-1.5 text-right">Falta</th>
+                            <th class="p-1.5">Entrega</th>
+                            <th class="p-1.5">Estado</th>
+                            <th class="p-1.5 text-center">Acc.</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tablaBody" class="text-[11px]"></tbody>
+                </table>
+            </div>
+        </section>
+    `;
+    lucide.createIcons();
+
+    cargarTodoConsolidado();
+    cargarLineasMaquinas();
+    cargarEmpresasFiltro();
+}
+
+function cargarTodoConsolidado() {
+    cargarDatosConsolidados();
+}
+
+function cargarDatosConsolidados() {
+    if (typeof google === "undefined" || !google.script) return;
+
+    const esAdmin = SESION.esAdmin === true;
+    const colspan = esAdmin ? 12 : 11;
+
+    const tbody = document.getElementById("tablaBody");
+    if (!tbody) return;
+
+    tbody.innerHTML = `
+        <tr><td colspan="${colspan}" class="text-center py-10">
+            <div class="inline-block w-8 h-8 border-4 border-sky-600 dark:border-pgs-cyan border-t-transparent rounded-full animate-spin"></div>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mt-3 font-bold">Cargando datos...</p>
+        </td></tr>
+    `;
+
+    google.script.run
+        .withSuccessHandler(datos => {
+            DATOS_CONSOLIDADOS = datos || [];
+            renderTablaConsolidada(DATOS_CONSOLIDADOS);
+        })
+        .withFailureHandler(err => {
+            tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center py-10 text-rose-500 font-bold">Error: ${err.message}</td></tr>`;
+        })
+        .obtenerDatosConsolidados(SESION.cedula);
+}
+
+function cargarLineasMaquinas() {
+    if (typeof google === "undefined" || !google.script) return;
+    google.script.run.withSuccessHandler(lineas => { LINEAS_MAQUINAS = lineas || []; }).obtenerLineasConMaquinas(SESION.cedula);
+}
+
+function cargarEmpresasFiltro() {
+    if (typeof google === "undefined" || !google.script) return;
+    if (!SESION.esAdmin) return;
+    google.script.run.withSuccessHandler(empresas => {
+        const select = document.getElementById("filtroEmpresa");
+        if (!select) return;
+        (empresas || []).forEach(e => {
+            const opt = document.createElement("option");
+            opt.value = e.codigo_empresa;
+            opt.textContent = e.razon_social;
+            select.appendChild(opt);
+        });
+    }).obtenerEmpresasDesdeSheets(SESION.cedula);
+}
+
+function aplicarFiltros() {
+    const urgencia = document.getElementById("filtroUrgencia").value;
+    const estadoProd = document.getElementById("filtroEstadoProd").value;
+    const pisoProducir = document.getElementById("filtroPisoProducir").value;
+    const filtroEmpresa = document.getElementById("filtroEmpresa")?.value || "";
+    const busqueda = document.getElementById("busquedaTexto").value.toLowerCase().trim();
+
+    let filtrados = DATOS_CONSOLIDADOS;
+
+    if (urgencia) filtrados = filtrados.filter(d => d.urgencia === urgencia);
+    if (estadoProd) filtrados = filtrados.filter(d => d.estado_produccion === estadoProd);
+    if (pisoProducir === "Piso") filtrados = filtrados.filter(d => d.falta_producir <= 0);
+    if (pisoProducir === "Producir") filtrados = filtrados.filter(d => d.falta_producir > 0);
+    if (SESION.esAdmin && filtroEmpresa) filtrados = filtrados.filter(d => d.empresa === filtroEmpresa);
+    if (busqueda) {
+        filtrados = filtrados.filter(d =>
+            String(d.pedido).toLowerCase().includes(busqueda) ||
+            String(d.sku).toLowerCase().includes(busqueda) ||
+            String(d.descripcion_sku).toLowerCase().includes(busqueda) ||
+            String(d.destinatario).toLowerCase().includes(busqueda)
+        );
+    }
+
+    renderTablaConsolidada(filtrados);
+}
+
+function renderTablaConsolidada(datos) {
+    const tbody = document.getElementById("tablaBody");
+    if (!tbody) return;
+    tbody.innerHTML = "";
+
+    const esAdmin = SESION.esAdmin === true;
+    const colspan = esAdmin ? 12 : 11;
+
+    if (!datos || datos.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="${colspan}" class="text-center py-10 text-slate-500 font-bold text-xs">No hay datos para programar</td></tr>`;
+        return;
+    }
+
+    const puedeCrear = SESION.perfil === "Planificador" || esAdmin;
+
+    datos.forEach(d => {
+        const expandido = PEDIDOS_PROG_EXPANDIDOS.has(d.pedido + "|" + d.sku);
+        const tieneNovedad = d.novedades && d.novedades.length > 0;
+        const unidad = d.unidad_medida || '';
+
+        const tr = document.createElement("tr");
+        tr.className = "hover:bg-slate-100 dark:hover:bg-slate-800/50 border-b border-slate-200 dark:border-pgs-border/40";
+        tr.innerHTML = `
+            <td class="p-1.5 cursor-pointer" onclick="toggleDetalle('${d.pedido}', '${d.sku}')">
+                <i data-lucide="${expandido ? 'chevron-down' : 'chevron-right'}" class="w-3.5 h-3.5 text-sky-700 dark:text-pgs-cyan"></i>
+            </td>
+            <td class="p-1.5 font-mono font-bold text-sky-800 dark:text-pgs-cyan whitespace-nowrap">${d.pedido}</td>
+            ${esAdmin ? `<td class="p-1.5 font-mono text-slate-600 dark:text-slate-400 whitespace-nowrap">${d.empresa || '-'}</td>` : ''}
+            <td class="p-1.5 whitespace-nowrap">
+                <span class="font-mono font-bold text-slate-900 dark:text-white">${d.sku}</span>
+                <span class="text-slate-500 dark:text-slate-400 ml-1">· ${d.descripcion_sku || '-'}</span>
+            </td>
+            <td class="p-1.5 text-slate-600 dark:text-slate-400 whitespace-nowrap">${d.destinatario || '-'}</td>
+            <td class="p-1.5 text-right font-mono font-bold text-sky-700 dark:text-pgs-cyan whitespace-nowrap">${formatNum(d.cantidad_solicitada)} ${unidad}</td>
+            <td class="p-1.5 text-right font-mono text-emerald-700 dark:text-emerald-400 whitespace-nowrap">${formatNum(d.inventario_disponible)} ${unidad}</td>
+            <td class="p-1.5 text-right font-mono whitespace-nowrap">
+                <span class="text-sky-600 dark:text-sky-400">${formatNum(d.ops_pendientes)}</span>
+                <span class="text-slate-400"> / </span>
+                <span class="text-orange-700 dark:text-orange-400">${formatNum(d.ops_en_proceso)}</span>
+            </td>
+            <td class="p-1.5 text-right font-mono font-black ${d.falta_producir > 0 ? 'text-rose-700 dark:text-rose-400' : 'text-slate-400'} whitespace-nowrap">${formatNum(d.falta_producir)} ${unidad}</td>
+            <td class="p-1.5 text-[10px] whitespace-nowrap">
+                <div class="font-mono">${formatearFechaCorta(d.fecha_preferida_entrega)}</div>
+                <div class="text-slate-500">${formatearHoraCorta(d.hora_entrega)}</div>
+            </td>
+            <td class="p-1.5 whitespace-nowrap">${badgeEstadoProduccion(d.estado_produccion)}</td>
+            <td class="p-1.5 text-center whitespace-nowrap">
+                ${puedeCrear && d.estado_pedido === "Pendiente" ? 
+                    `<button onclick="abrirModalAprobar('${d.pedido}')" title="Aprobar Pedido" class="p-1 bg-emerald-100 dark:bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-200 dark:hover:bg-emerald-500/20 rounded mr-0.5">
+                        <i data-lucide="check-circle" class="w-3 h-3"></i>
+                    </button>` : ''}
+                ${puedeCrear && (d.estado_pedido === "Aprobado" || d.estado_pedido === "En producción") && d.falta_producir > 0 ? 
+                    `<button onclick="abrirModalCrearOP('${d.pedido}', '${d.sku}')" title="Programar OP" class="p-1 bg-sky-100 dark:bg-sky-500/10 text-sky-700 dark:text-sky-400 hover:bg-sky-200 dark:hover:bg-sky-500/20 rounded mr-0.5">
+                        <i data-lucide="plus-circle" class="w-3 h-3"></i>
+                    </button>` : ''}
+                ${tieneNovedad ? 
+                    `<button onclick="verNovedades('${d.pedido}', '${d.sku}')" title="Ver Novedades" class="p-1 bg-rose-100 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-200 dark:hover:bg-rose-500/20 rounded">
+                        <i data-lucide="alert-triangle" class="w-3 h-3"></i>
+                    </button>` : ''}
+            </td>
+        `;
+        tbody.appendChild(tr);
+
+        if (expandido) {
+            const trDet = document.createElement("tr");
+            trDet.className = "bg-slate-50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-pgs-border/20";
+            
+            let opsHTML = "";
+            if (d.ops && d.ops.length > 0) {
+                opsHTML = `
+                    <div class="mb-2">
+                        <p class="text-[9px] font-black uppercase text-slate-500 dark:text-slate-400 mb-1">OPs Asociadas (${d.ops.length}):</p>
+                        <div class="space-y-1">
+                            ${d.ops.map(op => `
+                                <div class="flex items-center gap-2 bg-white dark:bg-slate-800 px-2 py-1.5 rounded text-[10px] flex-wrap">
+                                    <span class="font-mono font-bold text-sky-700 dark:text-pgs-cyan">${op.numero_op}</span>
+                                    <span class="font-mono font-bold">${formatNum(op.cantidad_planeada)} ${unidad}</span>
+                                    <span class="text-slate-500">Línea ${op.linea || '-'}</span>
+                                    ${badgeEstadoOP(op.estado)}
+                                    ${op.estado === 'En proceso' && op.ultimo_proceso ? `<span class="ml-1 px-2 py-1 rounded text-[9px] font-black bg-sky-100 text-sky-800 dark:bg-sky-500/10 dark:text-sky-400 border border-sky-300 dark:border-sky-500/30">Paso: ${op.ultimo_proceso}</span>` : ''}
+                                    <span class="font-mono text-slate-400">${op.lote || ''}</span>
+                                    ${op.estado === "Pendiente" ? `
+                                        <button onclick="confirmarCancelarOP('${op.numero_op}')" title="Cancelar OP" class="text-rose-600 hover:text-rose-700 p-0.5 hover:bg-rose-100 dark:hover:bg-rose-500/10 rounded">
+                                            <i data-lucide="x-circle" class="w-3 h-3"></i>
+                                        </button>
+                                    ` : ''}
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            } else {
+                opsHTML = `
+                    <div class="mb-2 p-1.5 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded text-[10px] text-amber-800 dark:text-amber-400 font-bold">
+                        ⚠️ No hay OPs creadas para este SKU
+                    </div>
+                `;
+            }
+
+            let excesoHTML = "";
+            if (d.exceso > 0) {
+                const tieneOpsActivas = (d.ops_pendientes > 0 || d.ops_en_proceso > 0);
+                const textoExceso = tieneOpsActivas 
+                    ? `Hay un exceso de ${formatNum(d.exceso)} ${unidad}. Considere cancelar OPs.` 
+                    : `El inventario PT ya cubre la demanda. Exceso en bodega: ${formatNum(d.exceso)} ${unidad}.`;
+
+                excesoHTML = `
+                    <div class="mb-2 p-1.5 bg-amber-50 dark:bg-amber-500/10 border border-amber-300 dark:border-amber-500/30 rounded text-[10px] text-amber-800 dark:text-amber-400 font-bold flex items-center gap-1.5">
+                        <i data-lucide="info" class="w-3 h-3"></i>
+                        ℹ️ ${textoExceso}
+                    </div>
+                `;
+            }
+
+            let novedadesHTML = "";
+            if (tieneNovedad) {
+                novedadesHTML = `
+                    <div class="mt-2">
+                        <p class="text-[9px] font-black uppercase text-rose-500 dark:text-rose-400 mb-1">Novedades Activas:</p>
+                        <div class="space-y-1">
+                            ${d.novedades.map(n => `
+                                <div class="bg-rose-50 dark:bg-rose-500/10 px-2 py-1 rounded text-[10px] border border-rose-200 dark:border-rose-500/30">
+                                    <span class="font-bold text-rose-700 dark:text-rose-400">${n.tipo_novedad}:</span>
+                                    <span class="text-slate-700 dark:text-slate-300">${n.descripcion}</span>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                `;
+            }
+
+            trDet.innerHTML = `
+                <td></td>
+                <td colspan="${esAdmin ? 11 : 10}" class="p-3 pl-8">
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                            <p class="text-[9px] font-black uppercase text-slate-500 dark:text-slate-400 mb-1">Info del SKU:</p>
+                            <div class="text-[10px] space-y-0.5">
+                                <p><span class="text-slate-500">Unidad:</span> <b>${unidad}</b></p>
+                                <p><span class="text-slate-500">Presentación:</span> <b>${d.presentacion} ${unidad}/u.</b></p>
+                                <p><span class="text-slate-500">Unidades físicas:</span> <b>${formatNum(d.unidades_fisicas)} u.</b></p>
+                                <p><span class="text-slate-500">Línea habitual:</span> <b>${d.linea_habitual || '-'}</b></p>
+                                <p><span class="text-slate-500">Tiempo estándar:</span> <b>${d.tiempo_estandar || 0} min/u.</b></p>
+                                <p><span class="text-slate-500">Promedio por OP:</span> <b>${d.promedio_producir > 0 ? formatNum(Math.round(d.promedio_producir)) + ' ' + unidad : '-'}</b></p>
+                                <p><span class="text-slate-500">Fecha Entrega Planta:</span> <b>${d.fecha_entrega_planta || '-'}</b></p>
+                                <p><span class="text-slate-500">Prioridad:</span> <b>${d.prioridad || '-'}</b></p>
+                            </div>
+                        </div>
+                        <div>
+                            ${opsHTML}
+                        </div>
+                    </div>
+                    ${excesoHTML}
+                    ${novedadesHTML}
+                </td>
+            `;
+            tbody.appendChild(trDet);
+        }
+    });
+
+    lucide.createIcons();
+}
+
+function toggleDetalle(pedido, sku) {
+    const key = pedido + "|" + sku;
+    if (PEDIDOS_PROG_EXPANDIDOS.has(key)) PEDIDOS_PROG_EXPANDIDOS.delete(key);
+    else PEDIDOS_PROG_EXPANDIDOS.add(key);
+    aplicarFiltros();
+}
+
+function formatNum(n) {
+    if (n == null || isNaN(n)) return '0';
+    return Number(n).toLocaleString('es-CO');
+}
+
+function badgeEstadoProduccion(estado) {
+    const colores = {
+        "Sin programar":     "bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300",
+        "Programado parcial":"bg-amber-100 dark:bg-amber-500/10 text-amber-800 dark:text-amber-400",
+        "Programado":        "bg-sky-100 dark:bg-sky-500/10 text-sky-800 dark:text-sky-400",
+        "En producción":     "bg-orange-100 dark:bg-orange-500/10 text-orange-800 dark:text-orange-400",
+        "Listo":             "bg-emerald-100 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-400",
+        "Despachado":        "bg-cyan-100 dark:bg-cyan-500/10 text-cyan-800 dark:text-cyan-400",
+        "Cancelado":         "bg-rose-100 dark:bg-rose-500/10 text-rose-800 dark:text-rose-400"
+    };
+    const clase = colores[estado] || colores["Sin programar"];
+    return `<span class="px-1.5 py-0.5 rounded text-[9px] font-black ${clase}">${estado || '-'}</span>`;
+}
+
+function badgeEstadoOP(estado) {
+    const colores = {
+        "Pendiente":   "bg-amber-100 dark:bg-amber-500/10 text-amber-800 dark:text-amber-400",
+        "En proceso":  "bg-orange-100 dark:bg-orange-500/10 text-orange-800 dark:text-orange-400",
+        "Completada":  "bg-emerald-100 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-400",
+        "Cancelada":   "bg-rose-100 dark:bg-rose-500/10 text-rose-800 dark:text-rose-400"
+    };
+    const clase = colores[estado] || "bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300";
+    return `<span class="px-1.5 py-0.5 rounded text-[9px] font-black ${clase}">${estado}</span>`;
+}
+
+// ==========================================
+// VISTA CAPACIDAD
+// ==========================================
+function renderVistaCapacidad() {
+    const container = document.getElementById("contenidoProgramacion");
+    container.innerHTML = `
+        <section class="glass-panel bg-white/70 dark:bg-pgs-card/60 border border-white/30 dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden w-full transition-all duration-300">
+            <div class="p-4 border-b border-slate-300 dark:border-pgs-border flex flex-col md:flex-row gap-3 items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="p-2 bg-sky-100 dark:bg-pgs-cyan/10 rounded-xl text-sky-800 dark:text-pgs-cyan border border-sky-300 dark:border-sky-500/20">
+                        <i data-lucide="bar-chart-3" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-sm font-bold text-slate-900 dark:text-white">Capacidad de Planta (Jornada de 24h)</h2>
+                        <p class="text-[10px] text-slate-600 dark:text-slate-400">Tiempo y cantidad ocupada por OPs</p>
+                    </div>
+                </div>
+                
+                <div class="flex items-center gap-2 flex-wrap">
+                    <input type="date" id="capFechaInicio" class="bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-lg px-2 py-1.5 text-xs font-semibold">
+                    <span class="text-xs text-slate-500">al</span>
+                    <input type="date" id="capFechaFin" class="bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-lg px-2 py-1.5 text-xs font-semibold">
+                    <button onclick="cargarDatosCapacidad()" class="bg-slate-900 dark:bg-gradient-to-r dark:from-pgs-cyan dark:to-pgs-neon text-white dark:text-slate-950 font-black px-3 py-2 rounded-lg text-xs uppercase tracking-wider flex items-center gap-1.5 shadow-md">
+                        <i data-lucide="search" class="w-3.5 h-3.5"></i> Consultar
+                    </button>
+                </div>
+            </div>
+            <div id="capacidadContenido" class="p-4">
+                <div class="text-center py-10 text-slate-500 font-bold">Selecciona un rango de fechas y haz clic en Consultar</div>
+            </div>
+        </section>
+    `;
+    
+    const hoy = new Date();
+    const en7Dias = new Date(); en7Dias.setDate(hoy.getDate() + 7);
+    document.getElementById("capFechaInicio").value = formatearFechaInput(hoy);
+    document.getElementById("capFechaFin").value = formatearFechaInput(en7Dias);
+    
+    lucide.createIcons();
+    cargarDatosCapacidad();
+}
+
+function cargarDatosCapacidad() {
+    const fIni = document.getElementById("capFechaInicio").value;
+    const fFin = document.getElementById("capFechaFin").value;
+    if (!fIni || !fFin) return mostrarAlerta("Seleccione fechas válidas", true);
+    
+    const container = document.getElementById("capacidadContenido");
+    container.innerHTML = `<div class="text-center py-10"><div class="inline-block w-8 h-8 border-4 border-sky-600 dark:border-pgs-cyan border-t-transparent rounded-full animate-spin"></div><p class="text-xs mt-2 text-slate-500 font-bold">Calculando tiempos de producción...</p></div>`;
+    
+    google.script.run
+        .withSuccessHandler(res => {
+            if (!res.ok) {
+                container.innerHTML = `<div class="text-center py-10 text-rose-500 font-bold">Error: ${res.error}</div>`;
+                return;
+            }
+            dibujarTablaCapacidad(res);
+        })
+        .withFailureHandler(err => {
+            container.innerHTML = `<div class="text-center py-10 text-rose-500 font-bold">Error: ${err.message}</div>`;
+        })
+        .obtenerVistaCapacidad(SESION.cedula, fIni, fFin);
+}
+
+function dibujarTablaCapacidad(res) {
+    const container = document.getElementById("capacidadContenido");
+    const datos = res.datos;
+    const lineas = res.lineas;
+    
+    if (lineas.length === 0) {
+        container.innerHTML = `<div class="text-center py-10 text-slate-500 font-bold">No hay líneas activas configuradas.</div>`;
+        return;
+    }
+
+    const fechas = Object.keys(datos[lineas[0]] || {}).sort();
+
+    let html = `<div class="overflow-x-auto border border-slate-200 dark:border-pgs-border rounded-xl"><table class="w-full text-left text-xs border-collapse">`;
+    
+    html += `<thead><tr class="bg-slate-100 dark:bg-slate-800/50">
+        <th class="p-3 border border-slate-200 dark:border-pgs-border sticky left-0 bg-slate-100 dark:bg-slate-800 z-10 font-black text-slate-700 dark:text-slate-300">Línea de Producción</th>`;
+    fechas.forEach(f => {
+        const d = new Date(f + "T00:00:00");
+        const dia = d.getDate() + "/" + (d.getMonth()+1);
+        html += `<th class="p-2 border border-slate-200 dark:border-pgs-border text-center min-w-[150px] font-black text-slate-700 dark:text-slate-300">
+            ${dia}
+        </th>`;
+    });
+    html += `</tr></thead><tbody>`;
+
+    lineas.forEach(lin => {
+        html += `<tr class="hover:bg-slate-50 dark:hover:bg-slate-800/30 transition-colors">
+            <td class="p-3 border border-slate-200 dark:border-pgs-border font-bold text-sky-700 dark:text-pgs-cyan sticky left-0 bg-white dark:bg-slate-900 z-10">${lin}</td>`;
+        
+        fechas.forEach(f => {
+            const celda = datos[lin][f];
+            if (celda.descanso) {
+                html += `<td class="p-3 border border-slate-200 dark:border-pgs-border text-center bg-slate-50 dark:bg-slate-800/50 text-slate-400 text-[10px] font-bold">Descanso</td>`;
+                return;
+            }
+            
+            const pct = celda.porcentaje;
+            let colorBarra = pct > 90 ? 'bg-rose-500' : pct > 70 ? 'bg-amber-500' : 'bg-emerald-500';
+            
+            let cantTotal = 0;
+            let um = "";
+            
+            if (celda.ops && celda.ops.length > 0) {
+                celda.ops.forEach(op => { cantTotal += (op.cantidad || 0); if (op.unidad_medida) um = op.unidad_medida; });
+            }
+            if (celda.pedidosAprobados && celda.pedidosAprobados.length > 0) {
+                celda.pedidosAprobados.forEach(p => { cantTotal += (p.cantidad || 0); if (p.unidad_medida) um = p.unidad_medida; });
+            }
+            if (celda.pedidosPendientes && celda.pedidosPendientes.length > 0) {
+                celda.pedidosPendientes.forEach(p => { cantTotal += (p.cantidad || 0); if (p.unidad_medida) um = p.unidad_medida; });
+            }
+
+            const textCantidad = cantTotal > 0 ? `${formatNum(cantTotal)} ${um}` : "0";
+
+            html += `<td class="p-3 border border-slate-200 dark:border-pgs-border align-top">
+                <div class="flex flex-col gap-1.5">
+                    <div class="flex justify-between text-[10px] font-black">
+                        <span class="${pct > 90 ? 'text-rose-600' : 'text-slate-700 dark:text-slate-300'}">${pct}% ocupado</span>
+                    </div>
+                    <div class="w-full h-2.5 bg-slate-200 dark:bg-slate-700 rounded-full overflow-hidden">
+                        <div class="h-full ${colorBarra} rounded-full" style="width: ${pct}%"></div>
+                    </div>
+                    <div class="text-[9px] text-slate-500 dark:text-slate-400 font-medium leading-tight mt-1">
+                        Cant. Prog: <b class="text-sky-600 dark:text-sky-400">${textCantidad}</b><br>
+                        Tiempo OP: <b class="text-slate-700 dark:text-slate-300">${celda.tiempoOps}m</b><br>
+                        Libre: <b class="text-emerald-600 dark:text-emerald-400">${celda.tiempoLibre}m</b><br>
+                        (Jornada: 1440m)
+                    </div>
+                </div>
+            </td>`;
+        });
+        html += `</tr>`;
+    });
+
+    html += `</tbody></table></div>`;
+    container.innerHTML = html;
+}
+
+// ==========================================
+// MODALES Y FUNCIONES DE ACCIÓN
+// ==========================================
+function abrirModalAprobar(pedidoCod) {
+    const dato = DATOS_CONSOLIDADOS.find(d => d.pedido === pedidoCod);
+    if (!dato) return mostrarAlerta("Pedido no encontrado", true);
+
+    const fechaComercial = dato.fecha_preferida_entrega || "";
+
+    const overlay = document.createElement("div");
+    overlay.className = "fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto";
+    overlay.innerHTML = `
+        <div class="glass-panel bg-white/90 dark:bg-pgs-card/90 border border-sky-300/50 dark:border-pgs-cyan/30 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div class="flex items-center gap-3">
+                <div class="p-3 bg-emerald-100 dark:bg-emerald-500/10 rounded-xl border border-emerald-300 dark:border-emerald-500/30">
+                    <i data-lucide="check-circle" class="w-6 h-6 text-emerald-600 dark:text-emerald-400"></i>
+                </div>
+                <div>
+                    <h4 class="text-base font-bold text-slate-900 dark:text-white">Aprobar Pedido</h4>
+                    <p class="text-[11px] text-slate-500 dark:text-slate-400">${pedidoCod}</p>
+                </div>
+            </div>
+
+            <div class="p-3 bg-sky-50 dark:bg-sky-500/10 border border-sky-200 dark:border-sky-500/30 rounded-xl text-xs">
+                <p class="text-sky-800 dark:text-sky-400">
+                    <b>📅 Fecha Preferida Comercial:</b> ${fechaComercial || 'No definida'}
+                </p>
+            </div>
+
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Fecha Entrega Planta *</label>
+                    <input type="date" id="aprob_fecha" value="${fechaComercial}" onchange="verificarCambioFecha('${fechaComercial}')" required class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold">
+                </div>
+
+                <div id="motivoCambioBox" class="hidden">
+                    <label class="block text-xs font-bold text-rose-700 dark:text-rose-400 mb-1">⚠️ Motivo del cambio *</label>
+                    <textarea id="aprob_motivo" rows="3" placeholder="Ej: Sin capacidad en Línea 1 hasta el 09/10." class="w-full bg-rose-50 dark:bg-rose-500/10 border border-rose-300 dark:border-rose-500/30 rounded-xl px-3 py-2 text-xs font-semibold"></textarea>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Prioridad</label>
+                    <input type="number" id="aprob_prioridad" value="1" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold">
+                </div>
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-2">
+                <button onclick="this.closest('.fixed').remove()" class="px-4 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-bold transition">Cancelar</button>
+                <button id="btnAprobarModal" onclick="confirmarAprobarDesdeProg('${pedidoCod}')" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition flex items-center gap-2 shadow-md">
+                    <i data-lucide="check" class="w-4 h-4"></i> Aprobar
+                </button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+    lucide.createIcons();
+}
+
+function verificarCambioFecha(fechaOriginal) {
+    const fechaNueva = document.getElementById("aprob_fecha").value;
+    const motivoBox = document.getElementById("motivoCambioBox");
+    if (fechaNueva && fechaNueva !== fechaOriginal) motivoBox.classList.remove("hidden");
+    else motivoBox.classList.add("hidden");
+}
+
+function confirmarAprobarDesdeProg(pedidoCod) {
+    const fechaOriginal = DATOS_CONSOLIDADOS.find(d => d.pedido === pedidoCod)?.fecha_preferida_entrega || "";
+    const fecha = document.getElementById("aprob_fecha").value;
+    const prioridad = document.getElementById("aprob_prioridad").value;
+    const motivo = document.getElementById("aprob_motivo")?.value.trim() || "";
+
+    if (!fecha) return mostrarAlerta("La fecha es obligatoria", true);
+    if (fecha !== fechaOriginal && !motivo) return mostrarAlerta("Debes indicar el motivo del cambio de fecha", true);
+
+    const btn = document.getElementById("btnAprobarModal");
+    btn.disabled = true;
+    btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Aprobando...';
+    lucide.createIcons();
+
+    google.script.run
+        .withSuccessHandler(res => {
+            if (!res.ok) {
+                btn.disabled = false;
+                btn.innerHTML = '<i data-lucide="check" class="w-4 h-4"></i> Aprobar';
+                lucide.createIcons();
+                return mostrarAlerta(res.error, true);
+            }
+            document.querySelector(".fixed.z-50")?.remove();
+            mostrarAlerta(res.mensaje);
+            cargarTodoConsolidado();
+        })
+        .withFailureHandler(err => {
+            btn.disabled = false;
+            btn.innerHTML = '<i data-lucide="check" class="w-4 h-4"></i> Aprobar';
+            lucide.createIcons();
+            mostrarAlerta("Error: " + err.message, true);
+        })
+        .aprobarPedidoDesdeProgramacion(pedidoCod, fecha, prioridad, motivo, SESION.cedula);
+}
+
+function abrirModalCrearOP(pedido, sku) {
+    const dato = DATOS_CONSOLIDADOS.find(d => d.pedido === pedido && d.sku === sku);
+    if (!dato) return mostrarAlerta("Dato no encontrado", true);
+    if (dato.falta_producir <= 0) return mostrarAlerta("Este SKU ya está cubierto con inventario o producción en curso", true);
+
+    google.script.run
+        .withSuccessHandler(res => {
+            if (!res.ok) return mostrarAlerta(res.error, true);
+            mostrarModalOPs(res, dato);
+        })
+        .withFailureHandler(err => mostrarAlerta("Error calculando sugerencias: " + err.message, true))
+        .calcularSugerenciasOP(sku, dato.falta_producir, SESION.cedula);
+}
+
+function mostrarModalOPs(sugerencia, dato) {
+    const overlay = document.createElement("div");
+    overlay.id = "modalCrearOP";
+    overlay.className = "fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto";
+
+    const unidadSKU = sugerencia.unidadSKU || "";
+    const presentacion = sugerencia.presentacion || 1;
+    const tiempoEst = sugerencia.tiempoEstandar || 0;
+    const hayMensaje = sugerencia.mensaje && sugerencia.mensaje.length > 0;
+    const haySugerencias = sugerencia.sugerencias && sugerencia.sugerencias.length > 0;
+    const lineasDisponibles = sugerencia.lineasDisponibles || [];
+    
+    const fechaPreferida = dato.fecha_preferida_entrega || formatearFechaInput(new Date());
+    const horaPreferida = dato.hora_entrega || "08:00";
+
+    overlay.innerHTML = `
+        <div class="glass-panel bg-white/95 dark:bg-pgs-card/95 border border-sky-300/50 dark:border-pgs-cyan/30 rounded-2xl max-w-7xl w-full p-6 shadow-2xl space-y-4 my-8">
+            <div class="flex items-center gap-3 pb-3 border-b border-slate-200 dark:border-pgs-border">
+                <div class="p-3 bg-emerald-100 dark:bg-emerald-500/10 rounded-xl border border-emerald-300 dark:border-emerald-500/30">
+                    <i data-lucide="factory" class="w-6 h-6 text-emerald-600 dark:text-emerald-400"></i>
+                </div>
+                <div>
+                    <h4 class="text-base font-bold text-slate-900 dark:text-white">Programar Órdenes de Producción</h4>
+                    <p class="text-[11px] text-slate-500 dark:text-slate-400">${dato.pedido} · SKU ${dato.sku} · ${dato.descripcion_sku}</p>
+                </div>
+            </div>
+
+            <div id="modalError" class="hidden p-3 bg-rose-100 text-rose-800 text-xs font-bold rounded-xl border border-rose-300"></div>
+
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+                <div class="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-300 dark:border-pgs-border">
+                    <p class="text-[10px] font-black uppercase text-slate-500 mb-1">Cant. Solicitada</p>
+                    <p class="text-lg font-black text-sky-700 dark:text-pgs-cyan">${formatNum(dato.cantidad_solicitada)} ${unidadSKU}</p>
+                    <p class="text-[10px] text-slate-500">${formatNum(dato.unidades_fisicas)} u. físicas</p>
+                </div>
+                <div class="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-300 dark:border-pgs-border">
+                    <p class="text-[10px] font-black uppercase text-slate-500 mb-1">Inv. PT</p>
+                    <p class="text-lg font-black text-emerald-700 dark:text-emerald-400">${formatNum(dato.inventario_disponible)} ${unidadSKU}</p>
+                </div>
+                <div class="bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-300 dark:border-pgs-border">
+                    <p class="text-[10px] font-black uppercase text-slate-500 mb-1">En Producción</p>
+                    <p class="text-lg font-black text-orange-700 dark:text-orange-400">${formatNum(dato.inventario_en_produccion)} ${unidadSKU}</p>
+                </div>
+                <div class="bg-rose-50 dark:bg-rose-500/10 p-3 rounded-xl border border-rose-300 dark:border-rose-500/30">
+                    <p class="text-[10px] font-black uppercase text-rose-600 dark:text-rose-400 mb-1">Falta Producir</p>
+                    <p class="text-lg font-black text-rose-700 dark:text-rose-400">${formatNum(dato.falta_producir)} ${unidadSKU}</p>
+                </div>
+            </div>
+
+            ${hayMensaje ? `
+            <div class="p-3 rounded-xl border border-amber-400 dark:border-amber-500/50 bg-amber-50 dark:bg-amber-500/10">
+                <p class="text-xs font-bold text-amber-800 dark:text-amber-400 flex items-center gap-2">
+                    <i data-lucide="alert-triangle" class="w-4 h-4"></i>
+                    ${sugerencia.mensaje}
+                </p>
+            </div>
+            ` : ''}
+
+            <div class="bg-sky-50 dark:bg-sky-500/10 p-3 rounded-xl border border-sky-200 dark:border-sky-500/30">
+                <p class="text-xs text-sky-800 dark:text-sky-400">
+                    <b>Línea habitual:</b> ${sugerencia.lineaSugerida || 'N/A'} · 
+                    <b>Unidad:</b> ${unidadSKU} · 
+                    <b>Presentación:</b> ${presentacion} ${unidadSKU}/u. · 
+                    <b>Tiempo estándar:</b> ${tiempoEst} min/u.
+                </p>
+            </div>
+
+            ${lineasDisponibles.length > 0 ? `
+            <div>
+                <p class="text-xs font-black uppercase text-slate-600 dark:text-slate-400 mb-2">Líneas disponibles:</p>
+                <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 text-xs">
+                    ${lineasDisponibles.map(l => `
+                        <div class="p-2 rounded border ${l.compatible ? 'border-emerald-300 dark:border-emerald-500/30 bg-emerald-50 dark:bg-emerald-500/10' : 'border-amber-300 dark:border-amber-500/30 bg-amber-50 dark:bg-amber-500/10'} ${l.esHabitual ? 'ring-2 ring-sky-500' : ''}">
+                            <p class="font-bold text-slate-900 dark:text-white text-[11px] truncate">${l.linea}${l.esHabitual ? ' ⭐' : ''}</p>
+                            <p class="text-[10px] text-slate-600 dark:text-slate-400">Cap: ${formatNum(l.capacidadTotal)} ${l.unidad}</p>
+                            <p class="text-[10px] font-bold ${l.compatible ? 'text-emerald-700 dark:text-emerald-400' : 'text-amber-700 dark:text-amber-400'}">
+                                ${l.compatible ? '✅ Compatible' : '⚠️ Unidad distinta'}
+                            </p>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+            ` : ''}
+
+            ${haySugerencias ? `
+            <div>
+                <p class="text-xs font-black uppercase text-slate-600 dark:text-slate-400 mb-2">Sugerencias del sistema:</p>
+                <div id="sugerenciasContainer" class="space-y-2">
+                    ${sugerencia.sugerencias.map((sug, idx) => `
+                        <div class="sugerencia-item border ${idx === 0 ? 'border-emerald-500' : 'border-slate-300 dark:border-pgs-border'} rounded-xl p-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800 transition" data-idx="${idx}">
+                            <div class="flex items-center justify-between mb-2">
+                                <div class="flex items-center gap-2">
+                                    <input type="radio" name="sugerencia" value="${idx}" ${idx === 0 ? 'checked' : ''} class="w-4 h-4">
+                                    <span class="font-bold text-slate-900 dark:text-white text-sm">${sug.etiqueta}</span>
+                                </div>
+                                <span class="text-xs font-mono text-slate-500">${sug.numOPs} OP(s)</span>
+                            </div>
+                            <div class="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-6 gap-2 text-xs">
+                                ${sug.ops.map((op, i) => `
+                                    <div class="bg-slate-100 dark:bg-slate-900 px-2 py-1.5 rounded border border-slate-300 dark:border-pgs-border ${op.excedeCapacidad ? 'ring-1 ring-rose-400' : ''}">
+                                        <p class="text-[10px] font-bold text-slate-500 truncate">OP ${i + 1} · ${op.linea}</p>
+                                        <p class="font-mono font-black text-slate-900 dark:text-white text-[11px]">${formatNum(op.cantidad)} ${op.unidad}</p>
+                                        <p class="text-[10px] text-slate-500">${formatNum(op.cantidad_unidades)} u. · ${op.tiempo}m</p>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+            ` : `
+            <div class="p-4 text-center bg-slate-100 dark:bg-slate-900 rounded-xl text-xs text-slate-500 font-bold">
+                No hay sugerencias disponibles. Ajusta las líneas o el SKU.
+            </div>
+            `}
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                    <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Fecha de Producción *</label>
+                    <input type="date" id="op_fecha_prod" value="${fechaPreferida}" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Hora de Producción</label>
+                    <input type="time" id="op_hora_prod" value="${horaPreferida}" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold">
+                </div>
+            </div>
+
+            <div class="p-3 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-xl text-amber-800 dark:text-amber-400 text-xs font-bold flex items-center gap-2">
+                <i data-lucide="info" class="w-4 h-4"></i>
+                Se crearán las OPs y también los lotes automáticamente en Inventario PT con estado "Pendiente".
+            </div>
+
+            <div class="flex items-center justify-end gap-3 pt-2">
+                <button onclick="this.closest('.fixed').remove()" class="px-4 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-bold transition">Cancelar</button>
+                <button onclick="confirmarCrearOPs('${dato.pedido}', '${dato.sku}')" ${!haySugerencias ? 'disabled' : ''} class="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-400 disabled:cursor-not-allowed text-white rounded-xl text-xs font-black uppercase tracking-wider transition flex items-center gap-2 shadow-md">
+                    <i data-lucide="check" class="w-4 h-4"></i> Crear OPs
+                </button>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(overlay);
+    lucide.createIcons();
+
+    window._SUGERENCIAS_ACTUALES = sugerencia.sugerencias || [];
+    window._DATO_ACTUAL = dato;
+
+    document.querySelectorAll(".sugerencia-item").forEach(el => {
+        el.onclick = () => {
+            document.querySelectorAll('input[name="sugerencia"]').forEach(r => r.checked = false);
+            el.querySelector('input[name="sugerencia"]').checked = true;
+            document.querySelectorAll(".sugerencia-item").forEach(x => x.classList.remove("border-emerald-500"));
+            el.classList.add("border-emerald-500");
+        };
+    });
+}
+
+function confirmarCrearOPs(pedido, sku) {
+    const modal = document.getElementById("modalCrearOP");
+    const errorDiv = document.getElementById("modalError");
+    if (!modal) return;
+
+    const fechaProd = document.getElementById("op_fecha_prod").value;
+    if (!fechaProd) {
+        errorDiv.innerText = "La fecha de producción es obligatoria.";
+        errorDiv.classList.remove("hidden");
+        return;
+    }
+
+    if (modal.dataset.procesando === "true") return;
+
+    const seleccionado = document.querySelector('input[name="sugerencia"]:checked');
+    if (!seleccionado) {
+        errorDiv.innerText = "Debes seleccionar una sugerencia de OP.";
+        errorDiv.classList.remove("hidden");
+        return;
+    }
+
+    errorDiv.classList.add("hidden");
+
+    const idx = parseInt(seleccionado.value);
+    const sugerencia = window._SUGERENCIAS_ACTUALES[idx];
+    const dato = window._DATO_ACTUAL;
+    const horaProd = document.getElementById("op_hora_prod").value;
+
+    modal.dataset.procesando = "true";
+
+    const btn = modal.querySelector('button[onclick*="confirmarCrearOPs"]');
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i data-lucide="loader-2" class="w-4 h-4 animate-spin"></i> Creando...';
+        lucide.createIcons();
+    }
+
+    const opsData = sugerencia.ops.map(op => ({
+      sku: dato.sku,
+      descripcion_sku: dato.descripcion_sku,
+      cantidad: op.cantidad,
+      cantidad_unidades: op.cantidad_unidades,
+      unidad_medida: op.unidad,
+      presentacion: op.presentacion || 1,
+      linea: op.linea,
+      maquina: op.maquina,
+      fecha_produccion: fechaProd,
+      hora_produccion: horaProd,
+      fecha_entrega_despacho: dato.fecha_preferida_entrega,
+      hora_entrega: "",
+      pedido: dato.pedido,
+      destinatario_cliente: dato.destinatario
+    }));
+
+    google.script.run
+        .withSuccessHandler(res => {
+            if (!res.ok) {
+                modal.dataset.procesando = "false";
+                if (btn) { btn.disabled = false; btn.innerHTML = '<i data-lucide="check" class="w-4 h-4"></i> Crear OPs'; lucide.createIcons(); }
+                errorDiv.innerText = res.error;
+                errorDiv.classList.remove("hidden");
+                return;
+            }
+            modal.remove();
+            window._SUGERENCIAS_ACTUALES = null;
+            window._DATO_ACTUAL = null;
+            mostrarAlerta(res.mensaje);
+            cargarTodoConsolidado();
+        })
+        .withFailureHandler(err => {
+            modal.dataset.procesando = "false";
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i data-lucide="check" class="w-4 h-4"></i> Crear OPs'; lucide.createIcons(); }
+            errorDiv.innerText = "Error de servidor: " + err.message;
+            errorDiv.classList.remove("hidden");
+        })
+        .crearOPsDesdePedido(opsData, SESION.cedula);
+}
+
+function confirmarCancelarOP(numeroOP) {
+    confirmar(`¿Cancelar la OP <b>${numeroOP}</b>?<br><br>Esta acción no se puede deshacer.`, () => {
+        google.script.run
+            .withSuccessHandler(res => {
+                if (!res.ok) return mostrarAlerta(res.error, true);
+                mostrarAlerta(res.mensaje);
+                cargarTodoConsolidado();
+            })
+            .withFailureHandler(err => mostrarAlerta("Error: " + err.message, true))
+            .cancelarOP(numeroOP, SESION.cedula);
+    });
+}
+
+function verNovedades(pedido, sku) {
+    const dato = DATOS_CONSOLIDADOS.find(d => d.pedido === pedido && d.sku === sku);
+    if (!dato || !dato.novedades) return;
+
+    const overlay = document.createElement("div");
+    overlay.className = "fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4";
+    overlay.innerHTML = `
+        <div class="glass-panel bg-white/90 dark:bg-pgs-card/90 border border-rose-300/50 dark:border-rose-500/30 rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4">
+            <div class="flex items-center gap-3">
+                <div class="p-3 bg-rose-100 dark:bg-rose-500/10 rounded-xl border border-rose-300 dark:border-rose-500/30">
+                    <i data-lucide="alert-triangle" class="w-6 h-6 text-rose-600 dark:text-rose-400"></i>
+                </div>
+                <div>
+                    <h4 class="text-base font-bold text-slate-900 dark:text-white">Novedades del Pedido</h4>
+                    <p class="text-[11px] text-slate-500 dark:text-slate-400">${pedido} · SKU ${sku}</p>
+                </div>
+            </div>
+            <div class="space-y-2">
+                ${dato.novedades.map(n => `
+                    <div class="bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 rounded-xl p-3">
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="font-bold text-rose-800 dark:text-rose-400 text-xs">${n.tipo_novedad}</span>
+                            <span class="text-[10px] font-black px-2 py-0.5 rounded bg-rose-200 dark:bg-rose-500/20 text-rose-800 dark:text-rose-300">${n.estado_novedad}</span>
+                        </div>
+                        <p class="text-xs text-slate-700 dark:text-slate-300">${n.descripcion}</p>
+                        <p class="text-[10px] text-slate-500 dark:text-slate-400 mt-1">Responsable: ${n.responsable_gestion || 'Sin asignar'} · Impacto: ${n.impacto || 'N/A'}</p>
+                    </div>
+                `).join('')}
+            </div>
+            <div class="flex justify-end pt-2">
+                <button onclick="this.closest('.fixed').remove()" class="px-4 py-2.5 bg-slate-900 dark:bg-gradient-to-r dark:from-pgs-cyan dark:to-pgs-neon text-white dark:text-slate-950 rounded-xl text-xs font-black uppercase tracking-wider">Cerrar</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+    lucide.createIcons();
+}
+</script>

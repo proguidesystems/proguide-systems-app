@@ -1,0 +1,193 @@
+<script>
+let EMPRESAS_LISTA = [];
+
+function renderModuloEmpresas() {
+    const puedeEditarEste = puedeEditar("empresas");
+    const puedeElim = puedeEliminar("empresas");
+    const container = document.getElementById("modulosContainer");
+
+    container.innerHTML = `
+        ${puedeEditarEste ? `
+        <section class="glass-panel bg-white/70 dark:bg-pgs-card/60 border border-white/30 dark:border-white/10 rounded-2xl p-6 shadow-2xl relative overflow-hidden mb-8 transition-all duration-300">
+            <div class="absolute top-0 left-0 w-full h-1.5 bg-sky-700 dark:bg-gradient-to-r dark:from-pgs-cyan dark:to-pgs-neon"></div>
+            <div class="flex items-center gap-3 mb-6">
+                <div class="p-2.5 bg-sky-100 dark:bg-pgs-cyan/10 rounded-xl text-sky-800 dark:text-pgs-cyan border border-sky-300 dark:border-sky-500/20"><i data-lucide="building-2" class="w-6 h-6"></i></div>
+                <h2 id="empFormTitle" class="text-base font-bold text-slate-900 dark:text-white">Registro de Empresa</h2>
+                <button id="empCancelBtn" onclick="cancelarEmpresa()" class="hidden ml-auto text-xs text-rose-600 dark:text-rose-400 font-bold hover:underline">Cancelar</button>
+            </div>
+            <form id="empForm" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <input type="hidden" id="emp_edit_index" value="-1">
+                
+                <!-- CAMPO AUTOGENERADO -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Código empresa</label>
+                    <input type="text" id="e_cod_empresa" readonly placeholder="Generando..." class="w-full bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-500 cursor-not-allowed">
+                </div>
+
+                <div><label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Razón social *</label><input type="text" id="e_razon_social" required placeholder="Premex SAS" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white"></div>
+                <div><label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">NIT</label><input type="text" id="e_nit_identificacion" placeholder="9872256418" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white"></div>
+                <div><label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Dirección</label><input type="text" id="e_direccion" placeholder="Calle 50a # 35-12" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white"></div>
+                <div><label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Teléfono</label><input type="text" id="e_telefono_contacto" placeholder="456" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white"></div>
+                <div><label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Correo</label><input type="email" id="e_correo_contacto" placeholder="contacto@empresa.com" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white"></div>
+                <div><label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Departamento</label><input type="text" id="e_departamento" placeholder="Antioquia" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white"></div>
+                <div><label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Ciudad</label><input type="text" id="e_ciudad" placeholder="Medellín" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white"></div>
+                <div><label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Estado</label><select id="e_estado_empresa" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white"><option>Activo</option><option>Inactivo</option></select></div>
+                
+                <div class="lg:col-span-3 flex justify-end">
+                    <button type="submit" class="bg-slate-900 dark:bg-gradient-to-r dark:from-pgs-cyan dark:to-pgs-neon text-white dark:text-slate-950 font-black py-2.5 px-6 rounded-xl text-xs uppercase tracking-wider flex items-center gap-2 shadow-md cursor-pointer">
+                        <i data-lucide="save" class="w-4 h-4"></i><span>Guardar Empresa</span>
+                    </button>
+                </div>
+            </form>
+        </section>` : ""}
+
+        <section class="glass-panel bg-white/70 dark:bg-pgs-card/60 border border-white/30 dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden transition-all duration-300">
+            <div class="p-6 border-b border-slate-300 dark:border-pgs-border flex flex-col md:flex-row gap-4 items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="p-2.5 bg-emerald-100 dark:bg-emerald-500/10 rounded-xl text-emerald-800 dark:text-pgs-neon border border-emerald-300 dark:border-emerald-500/20"><i data-lucide="database" class="w-5 h-5"></i></div>
+                    <div><h3 class="font-bold text-slate-900 dark:text-white text-base">Empresas</h3><p class="text-xs text-slate-600 dark:text-slate-400"><span id="empTotal" class="font-bold text-sky-700 dark:text-pgs-cyan">0</span> registros</p></div>
+                </div>
+                <input type="text" id="empSearch" onkeyup="filtrarEmpresa()" placeholder="Buscar..." class="w-full md:w-96 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-4 py-2 text-xs font-semibold text-slate-900 dark:text-white">
+            </div>
+            <div class="overflow-x-auto max-h-[550px]">
+                <table class="w-full text-left text-xs">
+                    <thead class="bg-slate-200/50 dark:bg-slate-900/50 backdrop-blur-lg sticky top-0 text-slate-700 dark:text-slate-400 font-black uppercase tracking-wider border-b border-slate-300 dark:border-pgs-border z-10">
+                        <tr>
+                            <th class="p-4">Código</th><th class="p-4">Razón Social</th><th class="p-4">NIT</th>
+                            <th class="p-4">Dirección</th><th class="p-4">Teléfono</th><th class="p-4">Correo</th>
+                            <th class="p-4">Depto</th><th class="p-4">Ciudad</th><th class="p-4">Estado</th>
+                            ${puedeEditarEste || puedeElim ? '<th class="p-4 text-center">Acciones</th>' : ''}
+                        </tr>
+                    </thead>
+                    <tbody id="empTableBody"></tbody>
+                </table>
+            </div>
+        </section>
+    `;
+    lucide.createIcons();
+    document.getElementById("empForm")?.addEventListener("submit", guardarEmpresa);
+
+    if (typeof google !== "undefined" && google.script) {
+        // Autogenerar código
+        google.script.run.withSuccessHandler(codigo => {
+            const inputCod = document.getElementById("e_cod_empresa");
+            if (inputCod) inputCod.value = codigo;
+        }).generarCodEmpresa();
+
+        google.script.run.withSuccessHandler(datos => { 
+            EMPRESAS_LISTA = datos || []; 
+            renderTablaEmpresa(EMPRESAS_LISTA); 
+        })
+        .withFailureHandler(err => mostrarAlerta("Error: " + err.message, true))
+        .obtenerEmpresasDesdeSheets();
+    } else {
+        renderTablaEmpresa(EMPRESAS_LISTA);
+    }
+}
+
+function renderTablaEmpresa(datos) {
+    const tbody = document.getElementById("empTableBody");
+    if (!tbody) return;
+    const elTotal = document.getElementById("empTotal");
+    if (elTotal) elTotal.innerText = datos.length;
+    tbody.innerHTML = "";
+    const puedeEditarEste = puedeEditar("empresas");
+    const puedeElim = puedeEliminar("empresas");
+
+    if (!datos || datos.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="10" class="text-center py-10 text-slate-500 font-bold">No hay empresas registradas</td></tr>`;
+        return;
+    }
+    datos.forEach((item, index) => {
+        const tr = document.createElement("tr");
+        tr.className = "hover:bg-slate-100 dark:hover:bg-slate-800/50 border-b border-slate-200 dark:border-pgs-border/40 transition-colors";
+        tr.innerHTML = `
+            <td class="p-4 font-mono font-bold text-sky-800 dark:text-pgs-cyan">${item.cod_empresa}</td>
+            <td class="p-4 font-bold text-slate-900 dark:text-white">${item.razon_social}</td>
+            <td class="p-4">${item.nit_identificacion || '-'}</td>
+            <td class="p-4 text-slate-600 dark:text-slate-400">${item.direccion || '-'}</td>
+            <td class="p-4">${item.telefono_contacto || '-'}</td>
+            <td class="p-4 text-slate-600 dark:text-slate-400">${item.correo_contacto || '-'}</td>
+            <td class="p-4">${item.departamento || '-'}</td>
+            <td class="p-4">${item.ciudad || '-'}</td>
+            <td class="p-4"><span class="px-2 py-1 rounded text-[10px] font-black ${item.estado_empresa === 'Activo' ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-900 dark:text-emerald-400' : 'bg-rose-100 dark:bg-rose-500/10 text-rose-900 dark:text-rose-400'}">${item.estado_empresa}</span></td>
+            ${puedeEditarEste || puedeElim ? `<td class="p-4 text-center">
+                ${puedeEditarEste ? `<button onclick="editarEmpresa(${index})" class="p-1.5 hover:bg-sky-100 dark:hover:bg-sky-500/10 text-sky-800 dark:text-pgs-cyan rounded-lg mr-1"><i data-lucide="edit-3" class="w-4 h-4"></i></button>` : ''}
+                ${puedeElim ? `<button onclick="eliminarEmpresa(${index})" class="p-1.5 hover:bg-rose-100 dark:hover:bg-rose-500/10 text-rose-600 rounded-lg"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
+            </td>` : ''}
+        `;
+        tbody.appendChild(tr);
+    });
+    lucide.createIcons();
+}
+
+function guardarEmpresa(e) {
+    e.preventDefault();
+    const data = {
+        cod_empresa: document.getElementById("e_cod_empresa").value.trim(),
+        razon_social: document.getElementById("e_razon_social").value.trim(),
+        nit_identificacion: document.getElementById("e_nit_identificacion").value.trim(),
+        direccion: document.getElementById("e_direccion").value.trim(),
+        telefono_contacto: document.getElementById("e_telefono_contacto").value.trim(),
+        correo_contacto: document.getElementById("e_correo_contacto").value.trim(),
+        departamento: document.getElementById("e_departamento").value.trim(),
+        ciudad: document.getElementById("e_ciudad").value.trim(),
+        estado_empresa: document.getElementById("e_estado_empresa").value
+    };
+    google.script.run.withSuccessHandler(res => {
+        if (!res.ok) return mostrarAlerta(res.error, true);
+        EMPRESAS_LISTA = res.registros; 
+        cancelarEmpresa(); 
+        renderTablaEmpresa(EMPRESAS_LISTA);
+        mostrarAlerta("Empresa guardada ✅");
+    }).withFailureHandler(err => mostrarAlerta("Error: " + err.message, true))
+      .guardarEmpresaEnSheets(data, SESION.cedula);
+}
+
+function editarEmpresa(i) {
+    const item = EMPRESAS_LISTA[i];
+    document.getElementById("emp_edit_index").value = i;
+    for (const k in item) { 
+        const el = document.getElementById("e_" + k); 
+        if (el) el.value = item[k]; 
+    }
+    document.getElementById("empFormTitle").innerText = "Modificando: " + item.cod_empresa;
+    document.getElementById("empCancelBtn").classList.remove("hidden");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function cancelarEmpresa() {
+    document.getElementById("empForm").reset();
+    document.getElementById("emp_edit_index").value = -1;
+    
+    // Al cancelar, pedir de nuevo el siguiente código autoincrementable
+    if (typeof google !== "undefined" && google.script) {
+        google.script.run.withSuccessHandler(codigo => {
+            const inputCod = document.getElementById("e_cod_empresa");
+            if (inputCod) inputCod.value = codigo;
+        }).generarCodEmpresa();
+    }
+
+    document.getElementById("empFormTitle").innerText = "Registro de Empresa";
+    document.getElementById("empCancelBtn").classList.add("hidden");
+}
+
+function eliminarEmpresa(i) {
+    confirmar("¿Eliminar la empresa <b>" + EMPRESAS_LISTA[i].razon_social + "</b>?", () => {
+        google.script.run
+            .withSuccessHandler(res => {
+                if (!res.ok) return mostrarAlerta(res.error, true);
+                EMPRESAS_LISTA = res.registros;
+                renderTablaEmpresa(EMPRESAS_LISTA);
+                mostrarAlerta("Empresa eliminada ✅");
+            })
+            .withFailureHandler(err => mostrarAlerta("Error: " + err.message, true))
+            .eliminarEmpresaEnSheets(EMPRESAS_LISTA[i].cod_empresa, SESION.cedula);
+    });
+}
+
+function filtrarEmpresa() {
+    const q = document.getElementById("empSearch").value.toLowerCase();
+    renderTablaEmpresa(EMPRESAS_LISTA.filter(item => Object.values(item).some(v => String(v).toLowerCase().includes(q))));
+}
+</script>

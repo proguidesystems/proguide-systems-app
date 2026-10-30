@@ -1,0 +1,224 @@
+<script>
+let DATOS_PORTAL = null;
+let PERFIL_ACTIVO = null;
+
+// Matriz de perfiles con permiso primario para cada módulo
+const PERFILES_POR_MODULO = {
+    mod_maestros: ["Administrador"],
+    mod_usuarios: ["Administrador"],
+    mod_pedidos: ["Administrador", "KAM Logístico"],
+    mod_programacion: ["Administrador", "Planificador"],
+    mod_planta: ["Administrador", "Coordinador planta", "Operario"],
+    mod_dashboards: ["Administrador", "Gerencial", "Abastecimiento", "KAM Logístico", "Planificador", "Coordinador planta"]
+};
+
+document.addEventListener("DOMContentLoaded", () => {
+    initTheme();
+    cargarDatosHub();
+});
+
+function cargarDatosHub() {
+    google.script.run
+        .withSuccessHandler(res => {
+            if (!res.ok) return console.error(res.error);
+            DATOS_PORTAL = res;
+            renderModulos(res.modulos);
+            renderPerfiles(res.perfiles);
+        })
+        .withFailureHandler(err => console.error("Error al cargar portal:", err))
+        .obtenerDatosPortal();
+}
+
+function renderModulos(modulos) {
+    const grid = document.getElementById("gridModulos");
+    if (!grid || !modulos) return;
+    grid.innerHTML = "";
+
+    modulos.forEach(m => {
+        let items = [];
+        try {
+            items = typeof m.caracteristicas === "string" ? JSON.parse(m.caracteristicas) : (m.caracteristicas || []);
+        } catch (e) {
+            items = [m.caracteristicas || ""];
+        }
+
+        const div = document.createElement("div");
+        div.className = "glass-panel p-6 flex flex-col justify-between border-t-4 border-t-sky-500 hover:border-t-[#00D2FF] transition group";
+        div.innerHTML = `
+            <div>
+                <div class="flex items-start justify-between gap-3 mb-3">
+                    <div class="flex items-center gap-3">
+                        <div class="p-2.5 rounded-xl bg-sky-100 dark:bg-sky-500/10 text-sky-600 dark:text-pgs-cyan border border-sky-300 dark:border-sky-500/20">
+                            <i data-lucide="${m.icono || 'box'}" class="w-5 h-5"></i>
+                        </div>
+                        <div>
+                            <span class="text-[9px] font-black uppercase text-sky-600 dark:text-pgs-cyan">${m.alcance}</span>
+                            <h4 class="text-base font-bold text-slate-900 dark:text-white leading-tight">${m.nombre}</h4>
+                        </div>
+                    </div>
+                </div>
+
+                <p class="text-xs text-slate-600 dark:text-slate-400 font-medium mb-4 leading-relaxed">${m.descripcion}</p>
+
+                <div class="space-y-2 pt-2 border-t border-slate-200 dark:border-slate-800">
+                    <p class="text-[10px] font-black uppercase tracking-wider text-slate-500">Capacidades Principales:</p>
+                    <ul class="space-y-1.5 text-xs text-slate-700 dark:text-slate-300">
+                        ${items.map(it => `
+                            <li class="flex items-start gap-2">
+                                <i data-lucide="check" class="w-3.5 h-3.5 text-sky-500 shrink-0 mt-0.5"></i>
+                                <span>${it}</span>
+                            </li>
+                        `).join('')}
+                    </ul>
+                </div>
+            </div>
+
+            <div class="mt-6 pt-4 border-t border-slate-200 dark:border-slate-800 space-y-3">
+                <div class="flex items-center justify-between text-[10px]">
+                    <span class="text-slate-500 font-bold">Subsistema:</span>
+                    <span class="font-bold text-sky-600 dark:text-pgs-cyan">${m.subsistema || 'Core'}</span>
+                </div>
+                
+                <button onclick="abrirModalAcceso('${m.id}')" class="w-full bg-slate-900 hover:bg-slate-800 dark:bg-gradient-to-r dark:from-pgs-cyan dark:to-sky-500 text-white dark:text-slate-950 font-black py-2.5 px-4 rounded-xl text-xs uppercase tracking-wider flex items-center justify-center gap-2 shadow-md transition group-hover:shadow-[0_0_20px_rgba(0,210,255,0.4)] cursor-pointer">
+                    <span>${m.texto_boton || 'Ingresar al Módulo'}</span>
+                    <i data-lucide="shield-check" class="w-3.5 h-3.5"></i>
+                </button>
+            </div>
+        `;
+        grid.appendChild(div);
+    });
+    lucide.createIcons();
+}
+
+function abrirModalAcceso(moduloId) {
+    const m = DATOS_PORTAL.modulos.find(item => item.id === moduloId);
+    if (!m) return;
+
+    document.getElementById("modalTitulo").innerText = m.nombre;
+    document.getElementById("modalAlcance").innerText = m.alcance;
+    document.getElementById("modalBtnContinuar").href = m.url_modulo;
+
+    const perfilesPermitidos = PERFILES_POR_MODULO[moduloId] || ["Administrador"];
+    const contenedorTags = document.getElementById("modalPerfilesAutorizados");
+    contenedorTags.innerHTML = perfilesPermitidos.map(p => `
+        <span class="px-2.5 py-1 rounded-md text-[10px] font-black uppercase tracking-wider bg-sky-100 dark:bg-sky-500/20 text-sky-800 dark:text-pgs-cyan border border-sky-300 dark:border-sky-500/30">
+            ${p}
+        </span>
+    `).join('');
+
+    const modal = document.getElementById("modalAcceso");
+    modal.classList.remove("hidden");
+    modal.classList.add("flex");
+    lucide.createIcons();
+}
+
+function cerrarModalAcceso() {
+    const modal = document.getElementById("modalAcceso");
+    modal.classList.add("hidden");
+    modal.classList.remove("flex");
+}
+
+function renderPerfiles(perfiles) {
+    const barra = document.getElementById("barraPerfiles");
+    if (!barra || !perfiles || perfiles.length === 0) return;
+    barra.innerHTML = "";
+
+    perfiles.forEach((p, idx) => {
+        const btn = document.createElement("button");
+        btn.className = `role-card p-3 rounded-xl border border-slate-300 dark:border-pgs-border text-center transition flex flex-col items-center justify-center gap-1.5 cursor-pointer ${idx === 0 ? 'active' : ''}`;
+        btn.onclick = () => seleccionarPerfil(p.perfil);
+        btn.innerHTML = `
+            <div class="p-2 rounded-lg bg-slate-200 dark:bg-slate-800 text-sky-600 dark:text-pgs-cyan">
+                <i data-lucide="${p.icono || 'user'}" class="w-4 h-4"></i>
+            </div>
+            <p class="text-[11px] font-black text-slate-900 dark:text-white leading-tight uppercase">${p.perfil}</p>
+        `;
+        barra.appendChild(btn);
+    });
+    lucide.createIcons();
+    seleccionarPerfil(perfiles[0].perfil);
+}
+
+function seleccionarPerfil(nombrePerfil) {
+    PERFIL_ACTIVO = nombrePerfil;
+    const p = DATOS_PORTAL.perfiles.find(item => item.perfil === nombrePerfil);
+    if (!p) return;
+
+    document.querySelectorAll(".role-card").forEach(el => {
+        const texto = el.querySelector("p")?.innerText.trim();
+        el.classList.toggle("active", texto === nombrePerfil.toUpperCase());
+    });
+
+    let resp = [];
+    try {
+        resp = typeof p.responsabilidades === "string" ? JSON.parse(p.responsabilidades) : (p.responsabilidades || []);
+    } catch (e) {
+        resp = [p.responsabilidades || ""];
+    }
+
+    const box = document.getElementById("detallePerfil");
+    box.innerHTML = `
+        <div class="flex flex-col md:flex-row items-start justify-between gap-4 mb-4 pb-4 border-b border-slate-300 dark:border-pgs-border">
+            <div class="space-y-1">
+                <span class="text-[10px] font-black uppercase text-sky-600 dark:text-pgs-cyan tracking-wider">Misión y Propósito del Rol</span>
+                <h4 class="text-base font-bold text-slate-900 dark:text-white">${p.perfil}</h4>
+                <p class="text-xs text-slate-600 dark:text-slate-300 leading-relaxed max-w-3xl">${p.mision}</p>
+            </div>
+            <div class="bg-sky-50 dark:bg-sky-500/10 p-3.5 rounded-xl border border-sky-200 dark:border-sky-500/30 text-left md:text-right shrink-0">
+                <p class="text-[10px] font-black uppercase text-slate-500 tracking-wider">Métrica de Éxito (KPI)</p>
+                <p class="text-xs font-black text-sky-700 dark:text-pgs-cyan mt-0.5">${p.kpi_principal}</p>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+            <div>
+                <p class="text-xs font-black uppercase text-slate-500 dark:text-slate-400 mb-2 flex items-center gap-1.5">
+                    <i data-lucide="check-circle-2" class="w-3.5 h-3.5 text-emerald-500"></i> Responsabilidades Operativas:
+                </p>
+                <ul class="space-y-2 text-xs text-slate-700 dark:text-slate-300">
+                    ${resp.map(r => `
+                        <li class="p-2.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-start gap-2">
+                            <span class="w-1.5 h-1.5 rounded-full bg-sky-500 shrink-0 mt-1.5"></span>
+                            <span>${r}</span>
+                        </li>
+                    `).join('')}
+                </ul>
+            </div>
+
+            <div class="space-y-4">
+                <div>
+                    <p class="text-xs font-black uppercase text-slate-500 dark:text-slate-400 mb-2 flex items-center gap-1.5">
+                        <i data-lucide="lock-open" class="w-3.5 h-3.5 text-sky-500"></i> Módulos y Pestañas Habilitadas:
+                    </p>
+                    <div class="p-3.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-sky-700 dark:text-pgs-cyan">
+                        ${p.acceso_modulos}
+                    </div>
+                </div>
+
+                <div class="p-3.5 rounded-xl bg-slate-200/60 dark:bg-slate-800/60 border border-slate-300 dark:border-slate-700">
+                    <p class="text-[11px] text-slate-600 dark:text-slate-400 font-medium">
+                        <b>Control de Navegación:</b> Al ingresar con el usuario y contraseña de este rol, el enrutador inteligente de ProGuide Systems mostrará exclusivamente los módulos a los que tiene autorización.
+                    </p>
+                </div>
+            </div>
+        </div>
+    `;
+    lucide.createIcons();
+}
+
+function initTheme() {
+    const isDark = (localStorage.getItem("theme") || "dark") !== "light";
+    document.documentElement.classList.toggle("dark", isDark);
+    const icon = document.getElementById("themeIcon");
+    if (icon) icon.setAttribute("data-lucide", isDark ? "sun" : "moon");
+    lucide.createIcons();
+}
+
+function toggleTheme() {
+    const isDark = document.documentElement.classList.toggle("dark");
+    localStorage.setItem("theme", isDark ? "dark" : "light");
+    const icon = document.getElementById("themeIcon");
+    if (icon) icon.setAttribute("data-lucide", isDark ? "sun" : "moon");
+    lucide.createIcons();
+}
+</script>

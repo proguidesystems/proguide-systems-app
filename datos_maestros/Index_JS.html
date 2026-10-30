@@ -1,0 +1,232 @@
+<script>
+let SESION = null;
+let MODULO_ACTIVO = null;
+
+const MODULOS_WEB = {
+    sku:           { titulo: "SKUs",          icono: "box",          render: () => renderModuloSKU() },
+    empresas:      { titulo: "Empresas",      icono: "building-2",   render: () => renderModuloEmpresas() },
+    destinatarios: { titulo: "Destinatarios", icono: "users",        render: () => renderModuloDestinatarios() },
+    lineas:        { titulo: "Líneas",        icono: "cpu",          render: () => renderModuloLineas() },
+    usuarios:      { titulo: "Usuarios",      icono: "user-cog",     render: () => renderModuloUsuarios() }
+};
+
+document.addEventListener("DOMContentLoaded", () => {
+    initTheme();
+    cargarSesion();
+    construirTabs();
+});
+
+function cargarSesion() {
+    try {
+        SESION = JSON.parse(localStorage.getItem("pgs_sesion"));
+    } catch (e) { SESION = null; }
+
+    // VALIDACIÓN ESTRICTA: Si falta el perfil o los permisos, recargamos
+    if (!SESION || !SESION.perfil || !SESION.permisos) {
+        localStorage.removeItem("pgs_sesion");
+        window.location.reload();
+        return;
+    }
+
+    const elUsuario = document.getElementById("headerUsuario");
+    const elPerfil = document.getElementById("headerPerfil");
+    const elBadge = document.getElementById("headerEmpresaBadge");
+    
+    if (elUsuario && elPerfil && elBadge) {
+        elUsuario.innerText = SESION.nombre;
+        elPerfil.innerText  = SESION.perfil;
+        
+        if (SESION.perfil === "Administrador") {
+            elBadge.innerHTML = `
+                <div class="mt-1 inline-flex items-center gap-1 bg-amber-100 dark:bg-amber-500/20 text-amber-800 dark:text-amber-300 text-[9px] font-black px-2 py-0.5 rounded border border-amber-300 dark:border-amber-500/50 uppercase tracking-widest shadow-sm">
+                    <i data-lucide="shield-check" class="w-3 h-3"></i> Super Admin
+                </div>
+            `;
+        } else {
+            elBadge.innerHTML = `
+                <div class="mt-1 inline-flex items-center gap-1 bg-sky-100 dark:bg-sky-500/20 text-sky-800 dark:text-sky-300 text-[9px] font-black px-2 py-0.5 rounded border border-sky-300 dark:border-sky-500/50 uppercase tracking-widest shadow-sm max-w-[180px] truncate" title="${SESION.empresaNombre || SESION.empresa}">
+                    <i data-lucide="building-2" class="w-3 h-3 flex-shrink-0"></i> 
+                    <span class="truncate">${SESION.empresaNombre || SESION.empresa}</span>
+                </div>
+            `;
+        }
+        lucide.createIcons();
+    }
+}
+
+function construirTabs() {
+    const nav = document.getElementById("tabsNav");
+    if (!nav) return;
+    nav.innerHTML = "";
+
+    const permisos = SESION.permisos || {};
+    Object.keys(MODULOS_WEB).forEach(key => {
+        const permiso = (permisos[key] || "").toUpperCase();
+        if (!permiso) return;
+
+        const btn = document.createElement("button");
+        btn.className = "tab-btn";
+        btn.dataset.modulo = key;
+        btn.innerHTML = `<i data-lucide="${MODULOS_WEB[key].icono}" class="w-4 h-4 inline-block mr-1.5 -mt-0.5"></i>${MODULOS_WEB[key].titulo}`;
+        
+        btn.onclick = () => activarModulo(key);
+        
+        nav.appendChild(btn);
+    });
+    lucide.createIcons();
+
+    const primerTab = nav.querySelector(".tab-btn");
+    if (primerTab) {
+        activarModulo(primerTab.dataset.modulo);
+    } else {
+        document.getElementById("modulosContainer").innerHTML = '<div class="text-center py-20 text-slate-500 font-bold">No tienes acceso a ningún módulo</div>';
+    }
+}
+
+function activarModulo(key) {
+    MODULO_ACTIVO = key;
+    
+    // 1. Pintamos la pestaña activa
+    document.querySelectorAll(".tab-btn").forEach(b => {
+        b.classList.toggle("active", b.dataset.modulo === key);
+    });
+
+    // 2. Limpiamos el contenedor ANTES de renderizar (con un spinner temporal)
+    const container = document.getElementById("modulosContainer");
+    if (container) {
+        container.innerHTML = `
+            <div class="flex items-center justify-center py-20">
+                <div class="w-8 h-8 border-4 border-sky-600 dark:border-pgs-cyan border-t-transparent rounded-full animate-spin"></div>
+            </div>
+        `;
+    }
+
+    // 3. Renderizamos con try-catch para capturar errores
+    setTimeout(() => {
+        try {
+            if (MODULOS_WEB[key] && MODULOS_WEB[key].render) {
+                MODULOS_WEB[key].render();
+            } else {
+                throw new Error("Módulo no configurado correctamente.");
+            }
+        } catch (error) {
+            console.error("Error al renderizar el módulo " + key + ":", error);
+            if (container) {
+                container.innerHTML = `
+                    <div class="text-center py-20 text-rose-500 font-bold">
+                        <i data-lucide="alert-triangle" class="w-10 h-10 mx-auto mb-4"></i>
+                        Ocurrió un error al cargar la pestaña.
+                        <br><span class="text-xs font-normal text-slate-500 mt-2">${error.message}</span>
+                    </div>
+                `;
+                lucide.createIcons();
+            }
+        }
+    }, 50);
+}
+
+function initTheme() {
+    if (localStorage.theme === 'light') {
+        document.documentElement.classList.remove('dark');
+        updateThemeIcon(false);
+    } else {
+        document.documentElement.classList.add('dark');
+        updateThemeIcon(true);
+    }
+}
+
+function toggleTheme() {
+    const isDark = document.documentElement.classList.toggle('dark');
+    localStorage.theme = isDark ? 'dark' : 'light';
+    updateThemeIcon(isDark);
+}
+
+function updateThemeIcon(isDark) {
+    const icon = document.getElementById("themeIcon");
+    if (!icon) return;
+    icon.setAttribute("data-lucide", isDark ? "sun" : "moon");
+    lucide.createIcons();
+}
+
+function mostrarAlerta(msg, esError = false) {
+    const alertBox = document.getElementById("statusAlert");
+    const alertMsg = document.getElementById("statusMessage");
+    if(!alertBox) return;
+    
+    alertBox.className = `p-4 rounded-xl border text-xs font-bold flex items-center justify-between transition-all backdrop-blur-md shadow-lg ${
+        esError
+        ? 'bg-rose-100/90 dark:bg-rose-500/10 border-rose-300 dark:border-rose-500/30 text-rose-800 dark:text-rose-400'
+        : 'bg-emerald-100/90 dark:bg-emerald-500/10 border-emerald-300 dark:border-emerald-500/30 text-emerald-900 dark:text-emerald-400'
+    }`;
+    alertMsg.innerText = msg;
+    alertBox.classList.remove("hidden");
+    setTimeout(() => alertBox.classList.add("hidden"), 4000);
+}
+
+function puedeEditar(modulo) {
+    const p = (SESION.permisos[modulo] || "").toUpperCase();
+    return p === "CRUD" || p.includes("U") || p.includes("C");
+}
+
+function puedeEliminar(modulo) {
+    const p = (SESION.permisos[modulo] || "").toUpperCase();
+    return p === "CRUD" || p.includes("D");
+}
+
+function confirmar(mensaje, onAceptar) {
+    const existente = document.getElementById("pgsConfirmOverlay");
+    if (existente) existente.remove();
+
+    const overlay = document.createElement("div");
+    overlay.id = "pgsConfirmOverlay";
+    overlay.className = "fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4";
+    overlay.innerHTML = `
+        <div class="bg-white/95 dark:bg-pgs-card/95 border border-slate-300 dark:border-pgs-border rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 backdrop-blur-xl">
+            <div class="flex items-center gap-3">
+                <div class="p-3 bg-amber-100 dark:bg-amber-500/10 rounded-xl border border-amber-300 dark:border-amber-500/30">
+                    <i data-lucide="alert-triangle" class="w-6 h-6 text-amber-600 dark:text-amber-400"></i>
+                </div>
+                <div>
+                    <h4 class="text-base font-bold text-slate-900 dark:text-white">Confirmar acción</h4>
+                    <p class="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Esta acción requiere tu confirmación</p>
+                </div>
+            </div>
+            <p class="text-sm text-slate-700 dark:text-slate-300 font-medium leading-relaxed">${mensaje}</p>
+            <div class="flex items-center justify-end gap-3 pt-2">
+                <button id="pgsConfirmCancel" class="px-4 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-bold transition">Cancelar</button>
+                <button id="pgsConfirmOk" class="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition flex items-center gap-2 shadow-md">
+                    <i data-lucide="check" class="w-4 h-4"></i> Confirmar
+                </button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+    lucide.createIcons();
+
+    const cerrar = () => overlay.remove();
+    document.getElementById("pgsConfirmCancel").onclick = cerrar;
+    document.getElementById("pgsConfirmOk").onclick = () => { cerrar(); onAceptar(); };
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) cerrar(); });
+}
+
+function cerrarSesion() {
+    confirmar("¿Estás seguro de que deseas cerrar la sesión?", () => {
+        localStorage.removeItem("pgs_sesion");
+        document.body.innerHTML = `
+            <div class="min-h-screen flex items-center justify-center bg-slate-100 dark:bg-pgs-bg">
+                <div class="text-center">
+                    <div class="w-12 h-12 border-4 border-sky-600 dark:border-pgs-cyan border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                    <p class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Cerrando sesión...</p>
+                </div>
+            </div>
+        `;
+        google.script.run
+            .withSuccessHandler((html) => {
+                document.open();
+                document.write(html);
+                document.close();
+            })
+            .obtenerLoginHTML();
+    });
+}
+</script>

@@ -1,0 +1,418 @@
+<script>
+let SKUS_LISTA = [];
+let SKU_DESTINATARIOS_LISTA = [];
+let SKU_EMPRESAS_DISPONIBLES = [];
+let SKU_LINEAS_DISPONIBLES = [];
+
+function renderModuloSKU() {
+    const puedeEditarEste = puedeEditar("sku");
+    const container = document.getElementById("modulosContainer");
+    const esAdmin = SESION.perfil === "Administrador" || SESION.empresa === "GLOBAL";
+
+    container.innerHTML = `
+        ${puedeEditarEste ? `
+        <section class="glass-panel bg-white/70 dark:bg-pgs-card/60 border border-white/30 dark:border-white/10 rounded-2xl p-6 shadow-2xl relative overflow-hidden mb-8 transition-all duration-300">
+            <div class="absolute top-0 left-0 w-full h-1.5 bg-sky-700 dark:bg-gradient-to-r dark:from-pgs-cyan dark:to-pgs-neon"></div>
+            <div class="flex items-center justify-between mb-6">
+                <div class="flex items-center gap-3">
+                    <div class="p-2.5 bg-sky-100 dark:bg-pgs-cyan/10 rounded-xl text-sky-800 dark:text-pgs-cyan border border-sky-300 dark:border-sky-500/20">
+                        <i data-lucide="box" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <h2 id="skuFormTitle" class="text-base font-bold text-slate-900 dark:text-white">Ingreso de Nuevo SKU</h2>
+                        <p class="text-xs text-slate-600 dark:text-slate-400 font-medium">Especificaciones del Catálogo Maestro</p>
+                    </div>
+                </div>
+                <button id="skuCancelBtn" onclick="cancelarSKU()" class="hidden text-xs text-rose-600 dark:text-rose-400 font-bold hover:underline flex items-center gap-1">
+                    <i data-lucide="x-circle" class="w-4 h-4"></i> Cancelar
+                </button>
+            </div>
+            <form id="skuForm" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <input type="hidden" id="sku_edit_index" value="-1">
+                
+                <div>
+                    <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Código SKU</label>
+                    <input type="text" id="f_codigo_sku" readonly placeholder="Calculando..." class="w-full bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-mono font-bold text-sky-700 dark:text-pgs-cyan cursor-not-allowed">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Descripción *</label>
+                    <input type="text" id="f_descripcion_sku" required placeholder="Galletas de Avena" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Empresa *</label>
+                    ${esAdmin ? `
+                    <select id="f_empresa" required onchange="alCambiarEmpresaSKU()" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white">
+                        <option value="">Seleccione empresa...</option>
+                    </select>
+                    ` : `
+                    <input type="text" readonly value="${SESION.empresaNombre || SESION.empresa}" class="w-full bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 cursor-not-allowed">
+                    <input type="hidden" id="f_empresa" value="${SESION.empresa}">
+                    `}
+                </div>
+                
+                <div>
+                    <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Destinatario</label>
+                    <select id="f_cod_destinatario" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white">
+                        <option value="">Cargando destinatarios...</option>
+                    </select>
+                </div>
+
+                <!-- SELECTOR RELACIONAL DE LÍNEAS -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Línea habitual *</label>
+                    <select id="f_linea_produccion_habitual" required class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white">
+                        <option value="">Seleccione línea...</option>
+                    </select>
+                </div>
+                
+                <div>
+                    <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">UN medida</label>
+                    <select id="f_unidad_medida" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white">
+                        <option>UNIDADES</option><option>KG</option><option>L</option><option>PZA</option><option>M</option><option>CAJA</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Presentación</label>
+                    <input type="text" id="f_presentacion" placeholder="10" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Características</label>
+                    <input type="text" id="f_caracteristicas" placeholder="Snacks" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Modelo</label>
+                    <select id="f_modelo_manufactura" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white">
+                        <option>MTO</option><option>MTS</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Tiempo est. (min)</label>
+                    <input type="number" step="0.01" id="f_tiempo_estandar_unidad" placeholder="2" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Stock mínimo</label>
+                    <input type="number" id="f_stock_minimo" placeholder="50" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Estado</label>
+                    <select id="f_estado_sku" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white">
+                        <option>Activo</option><option>Inactivo</option>
+                    </select>
+                </div>
+
+                <div class="lg:col-span-4 flex justify-end">
+                    <button type="submit" class="bg-slate-900 hover:bg-slate-800 dark:bg-gradient-to-r dark:from-pgs-cyan dark:to-pgs-neon text-white dark:text-slate-950 font-black py-2.5 px-6 rounded-xl text-xs uppercase tracking-wider transition flex items-center justify-center gap-2 shadow-md cursor-pointer">
+                        <i data-lucide="save" class="w-4 h-4"></i><span>Guardar SKU</span>
+                    </button>
+                </div>
+            </form>
+        </section>` : ""}
+
+        <section class="glass-panel bg-white/70 dark:bg-pgs-card/60 border border-white/30 dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden transition-all duration-300">
+            <div class="p-6 border-b border-slate-300 dark:border-pgs-border flex flex-col md:flex-row gap-4 items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="p-2.5 bg-emerald-100 dark:bg-emerald-500/10 rounded-xl text-emerald-800 dark:text-pgs-neon border border-emerald-300 dark:border-emerald-500/20">
+                        <i data-lucide="database" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-slate-900 dark:text-white text-base">Catálogo Maestro de SKUs</h3>
+                        <p class="text-xs text-slate-600 dark:text-slate-400 font-medium"><span id="skuTotal" class="font-bold text-sky-700 dark:text-pgs-cyan">0</span> SKUs registrados</p>
+                    </div>
+                </div>
+                <div class="relative w-full md:w-96">
+                    <i data-lucide="search" class="w-4 h-4 absolute left-3.5 top-3 text-slate-500"></i>
+                    <input type="text" id="skuSearch" onkeyup="filtrarSKU()" placeholder="Buscar..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl pl-10 pr-4 py-2 text-xs font-semibold text-slate-900 dark:text-white">
+                </div>
+            </div>
+            <div class="overflow-x-auto max-h-[550px]">
+                <table class="w-full text-left text-xs text-slate-800 dark:text-slate-300">
+                    <thead class="bg-slate-200/50 dark:bg-slate-900/50 backdrop-blur-lg sticky top-0 text-slate-700 dark:text-slate-400 font-black uppercase tracking-wider border-b border-slate-300 dark:border-pgs-border z-10">
+                        <tr>
+                            <th class="p-4">Código</th><th class="p-4">Descripción</th><th class="p-4">Destinatario</th>
+                            <th class="p-4">Empresa</th><th class="p-4">UM</th><th class="p-4">Present.</th><th class="p-4">Modelo</th>
+                            <th class="p-4">T. Est.</th><th class="p-4">Línea</th><th class="p-4">Stock</th>
+                            <th class="p-4">Estado</th>
+                            ${puedeEditarEste || puedeEliminar("sku") ? '<th class="p-4 text-center">Acciones</th>' : ''}
+                        </tr>
+                    </thead>
+                    <tbody id="skuTableBody"></tbody>
+                </table>
+            </div>
+        </section>
+    `;
+    lucide.createIcons();
+
+    document.getElementById("skuForm")?.addEventListener("submit", guardarSKU);
+
+    if (typeof google !== "undefined" && google.script) {
+        const empresaFiltro = esAdmin ? null : SESION.empresa;
+
+        // Cargar destinatarios
+        cargarDestinatariosSKU(empresaFiltro);
+
+        // Cargar líneas disponibles
+        cargarLineasSKU(empresaFiltro);
+
+        // Si la empresa es fija para el usuario
+        if (!esAdmin && SESION.empresa) {
+            obtenerSiguienteSKU(SESION.empresa);
+        }
+
+        // Si es Admin, cargar selector de empresas
+        if (esAdmin) {
+            google.script.run
+                .withSuccessHandler(empresas => {
+                    SKU_EMPRESAS_DISPONIBLES = empresas || [];
+                    const select = document.getElementById("f_empresa");
+                    if (select) {
+                        select.innerHTML = '<option value="">Seleccione empresa...</option>';
+                        SKU_EMPRESAS_DISPONIBLES.forEach(e => {
+                            const opt = document.createElement("option");
+                            opt.value = e.cod_empresa;
+                            opt.textContent = `${e.cod_empresa} - ${e.razon_social}`;
+                            select.appendChild(opt);
+                        });
+                    }
+                })
+                .obtenerEmpresasDesdeSheets();
+        }
+
+        // Cargar tabla de SKUs
+        google.script.run
+            .withSuccessHandler(datos => {
+                SKUS_LISTA = datos || [];
+                renderTablaSKU(SKUS_LISTA);
+            })
+            .withFailureHandler(err => mostrarAlerta("Error: " + err.message, true))
+            .obtenerSKUsDesdeSheets(empresaFiltro);
+          
+    } else {
+        renderTablaSKU(SKUS_LISTA);
+    }
+}
+
+function cargarDestinatariosSKU(empresaFiltro) {
+    google.script.run
+        .withSuccessHandler(destinatarios => {
+            SKU_DESTINATARIOS_LISTA = destinatarios || [];
+            poblarSelectDestinatarios(empresaFiltro);
+        })
+        .obtenerDestinatariosDesdeSheets(empresaFiltro);
+}
+
+function poblarSelectDestinatarios(empresa) {
+    const select = document.getElementById("f_cod_destinatario");
+    if (!select) return;
+    select.innerHTML = '<option value="">Seleccione un destinatario...</option>';
+    
+    const filtrados = (!empresa || empresa === "GLOBAL") 
+        ? SKU_DESTINATARIOS_LISTA 
+        : SKU_DESTINATARIOS_LISTA.filter(d => String(d.codigo_empresa).trim() === String(empresa).trim());
+
+    filtrados.forEach(d => {
+        const opt = document.createElement("option");
+        opt.value = d.cod_destinatario;
+        opt.textContent = `${d.cod_destinatario} - ${d.nombre_destinatario}`;
+        select.appendChild(opt);
+    });
+}
+
+function cargarLineasSKU(empresaFiltro, valorSeleccionar = "") {
+    google.script.run
+        .withSuccessHandler(lineas => {
+            SKU_LINEAS_DISPONIBLES = lineas || [];
+            poblarSelectLineas(empresaFiltro, valorSeleccionar);
+        })
+        .obtenerLineasMaquinasDesdeSheets(empresaFiltro);
+}
+
+function poblarSelectLineas(empresa, valorSeleccionar = "") {
+    const select = document.getElementById("f_linea_produccion_habitual");
+    if (!select) return;
+    select.innerHTML = '<option value="">Seleccione línea...</option>';
+
+    const filtradas = (!empresa || empresa === "GLOBAL") 
+        ? SKU_LINEAS_DISPONIBLES 
+        : SKU_LINEAS_DISPONIBLES.filter(l => String(l.empresa).trim() === String(empresa).trim());
+
+    // Agrupar por nombre de línea para evitar opciones duplicadas si hay varias máquinas en la misma línea
+    const nombresUnicos = [...new Set(filtradas.map(l => l.linea))];
+
+    nombresUnicos.forEach(nombreLinea => {
+        const opt = document.createElement("option");
+        opt.value = nombreLinea;
+        opt.textContent = nombreLinea;
+        if (valorSeleccionar && valorSeleccionar === nombreLinea) {
+            opt.selected = true;
+        }
+        select.appendChild(opt);
+    });
+}
+
+function obtenerSiguienteSKU(codEmpresa) {
+    if (!codEmpresa) return;
+    const inputSKU = document.getElementById("f_codigo_sku");
+    if (inputSKU) inputSKU.value = "Calculando...";
+    
+    google.script.run
+        .withSuccessHandler(codigo => {
+            if (inputSKU) inputSKU.value = codigo;
+        })
+        .generarCodSKU(codEmpresa);
+}
+
+function alCambiarEmpresaSKU() {
+    const editIndex = parseInt(document.getElementById("sku_edit_index")?.value || "-1", 10);
+    const emp = document.getElementById("f_empresa").value;
+    
+    if (emp) {
+        poblarSelectDestinatarios(emp);
+        poblarSelectLineas(emp);
+        if (editIndex === -1) {
+            obtenerSiguienteSKU(emp);
+        }
+    }
+}
+
+function renderTablaSKU(datos) {
+    const tbody = document.getElementById("skuTableBody");
+    if (!tbody) return;
+    const elTotal = document.getElementById("skuTotal");
+    if (elTotal) elTotal.innerText = datos.length;
+    tbody.innerHTML = "";
+    const puedeEditarEste = puedeEditar("sku");
+    const puedeElim = puedeEliminar("sku");
+
+    if (!datos || datos.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="12" class="text-center py-10 text-slate-500 font-bold">No hay SKUs registrados</td></tr>`;
+        return;
+    }
+
+    datos.forEach((item, index) => {
+        const tr = document.createElement("tr");
+        tr.className = "hover:bg-slate-100 dark:hover:bg-slate-800/50 transition border-b border-slate-200 dark:border-pgs-border/40";
+        tr.innerHTML = `
+            <td class="p-4 font-mono font-bold text-sky-800 dark:text-pgs-cyan">${item.codigo_sku}</td>
+            <td class="p-4 font-bold text-slate-900 dark:text-white">${item.descripcion_sku}</td>
+            <td class="p-4 text-slate-700 dark:text-slate-400">${item.cod_destinatario || '-'}</td>
+            <td class="p-4 font-mono font-bold text-slate-700 dark:text-slate-300">${item.empresa || '-'}</td>
+            <td class="p-4"><span class="bg-slate-200 dark:bg-slate-800 px-2 py-1 rounded text-[11px] font-bold">${item.unidad_medida}</span></td>
+            <td class="p-4">${item.presentacion || '-'}</td>
+            <td class="p-4"><span class="px-2 py-1 rounded text-[10px] font-black ${String(item.modelo_manufactura).includes('MTO') ? 'bg-amber-100 dark:bg-amber-500/10 text-amber-900 dark:text-amber-500' : 'bg-blue-100 dark:bg-blue-500/10 text-blue-900 dark:text-blue-500'}">${item.modelo_manufactura}</span></td>
+            <td class="p-4 font-mono font-bold">${item.tiempo_estandar_unidad} min</td>
+            <td class="p-4 font-mono text-sky-700 dark:text-pgs-cyan font-semibold">${item.linea_produccion_habitual || '-'}</td>
+            <td class="p-4 font-mono font-bold">${item.stock_minimo}</td>
+            <td class="p-4"><span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-[10px] font-black ${item.estado_sku === 'Activo' ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-900 dark:text-emerald-400' : 'bg-rose-100 dark:bg-rose-500/10 text-rose-900 dark:text-rose-400'}">${item.estado_sku}</span></td>
+            ${puedeEditarEste || puedeElim ? `<td class="p-4 text-center">
+                ${puedeEditarEste ? `<button onclick="editarSKU(${index})" class="p-1.5 hover:bg-sky-100 dark:hover:bg-sky-500/10 text-sky-800 dark:text-pgs-cyan rounded-lg mr-1"><i data-lucide="edit-3" class="w-4 h-4"></i></button>` : ''}
+                ${puedeElim ? `<button onclick="eliminarSKU(${index})" class="p-1.5 hover:bg-rose-100 dark:hover:bg-rose-500/10 text-rose-600 rounded-lg"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
+            </td>` : ''}
+        `;
+        tbody.appendChild(tr);
+    });
+    lucide.createIcons();
+}
+
+function guardarSKU(e) {
+    e.preventDefault();
+    const data = {
+        codigo_sku: document.getElementById("f_codigo_sku").value.trim(),
+        descripcion_sku: document.getElementById("f_descripcion_sku").value.trim(),
+        cod_destinatario: document.getElementById("f_cod_destinatario").value.trim(),
+        unidad_medida: document.getElementById("f_unidad_medida").value,
+        presentacion: document.getElementById("f_presentacion").value.trim(),
+        caracteristicas: document.getElementById("f_caracteristicas").value.trim(),
+        modelo_manufactura: document.getElementById("f_modelo_manufactura").value,
+        tiempo_estandar_unidad: parseFloat(document.getElementById("f_tiempo_estandar_unidad").value) || 0,
+        linea_produccion_habitual: document.getElementById("f_linea_produccion_habitual").value.trim(),
+        stock_minimo: parseInt(document.getElementById("f_stock_minimo").value, 10) || 0,
+        estado_sku: document.getElementById("f_estado_sku").value,
+        empresa: document.getElementById("f_empresa").value.trim()
+    };
+
+    if (!data.empresa) {
+        return mostrarAlerta("Debe asignar una empresa al SKU", true);
+    }
+    if (!data.linea_produccion_habitual) {
+        return mostrarAlerta("Debe seleccionar una línea de producción habitual", true);
+    }
+
+    google.script.run
+        .withSuccessHandler(res => {
+            if (!res.ok) return mostrarAlerta(res.error, true);
+            SKUS_LISTA = res.registros;
+            cancelarSKU();
+            renderTablaSKU(SKUS_LISTA);
+            mostrarAlerta("SKU guardado ✅");
+        })
+        .withFailureHandler(err => mostrarAlerta("Error: " + err.message, true))
+        .guardarSKUEnSheets(data, SESION.cedula);
+}
+
+function editarSKU(i) {
+    const item = SKUS_LISTA[i];
+    document.getElementById("sku_edit_index").value = i;
+    
+    // Cargar primero los valores simples
+    for (const k in item) {
+        const el = document.getElementById("f_" + k);
+        if (el && k !== "linea_produccion_habitual") el.value = item[k];
+    }
+    
+    // Poblar las líneas de la empresa del item y seleccionar la actual
+    poblarSelectLineas(item.empresa, item.linea_produccion_habitual);
+    poblarSelectDestinatarios(item.empresa);
+    
+    document.getElementById("skuFormTitle").innerText = "Modificando: " + item.codigo_sku;
+    document.getElementById("skuCancelBtn").classList.remove("hidden");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function cancelarSKU() {
+    document.getElementById("skuForm").reset();
+    document.getElementById("sku_edit_index").value = -1;
+    
+    const esAdmin = SESION.perfil === "Administrador" || SESION.empresa === "GLOBAL";
+    if (!esAdmin && SESION.empresa) {
+        const elEmpresa = document.getElementById("f_empresa");
+        if (elEmpresa) elEmpresa.value = SESION.empresa;
+        poblarSelectDestinatarios(SESION.empresa);
+        poblarSelectLineas(SESION.empresa);
+        obtenerSiguienteSKU(SESION.empresa);
+    } else {
+        document.getElementById("f_codigo_sku").value = "";
+        document.getElementById("f_linea_produccion_habitual").innerHTML = '<option value="">Seleccione línea...</option>';
+        document.getElementById("f_cod_destinatario").innerHTML = '<option value="">Seleccione un destinatario...</option>';
+    }
+
+    document.getElementById("skuFormTitle").innerText = "Ingreso de Nuevo SKU";
+    document.getElementById("skuCancelBtn").classList.add("hidden");
+}
+
+function eliminarSKU(i) {
+    confirmar("¿Eliminar el SKU <b>" + SKUS_LISTA[i].codigo_sku + "</b>? Esta acción no se puede deshacer.", () => {
+        google.script.run
+            .withSuccessHandler(res => {
+                if (!res.ok) return mostrarAlerta(res.error, true);
+                SKUS_LISTA = res.registros;
+                renderTablaSKU(SKUS_LISTA);
+                mostrarAlerta("SKU eliminado ✅");
+            })
+            .withFailureHandler(err => mostrarAlerta("Error: " + err.message, true))
+            .eliminarSKUEnSheets(SKUS_LISTA[i].codigo_sku, SESION.cedula);
+    });
+}
+
+function filtrarSKU() {
+    const q = document.getElementById("skuSearch").value.toLowerCase();
+    renderTablaSKU(SKUS_LISTA.filter(item => Object.values(item).some(v => String(v).toLowerCase().includes(q))));
+}
+</script>

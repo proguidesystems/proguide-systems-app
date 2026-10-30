@@ -1,0 +1,302 @@
+<script>
+let LINEAS_LISTA = [];
+let LINEAS_EMPRESAS_DISPONIBLES = [];
+
+function renderModuloLineas() {
+    const puedeEditarEste = puedeEditar("lineas");
+    const container = document.getElementById("modulosContainer");
+    const esAdmin = SESION.perfil === "Administrador" || SESION.empresa === "GLOBAL";
+
+    container.innerHTML = `
+        ${puedeEditarEste ? `
+        <section class="glass-panel bg-white/70 dark:bg-pgs-card/60 border border-white/30 dark:border-white/10 rounded-2xl p-6 shadow-2xl relative overflow-hidden mb-8 transition-all duration-300">
+            <div class="absolute top-0 left-0 w-full h-1.5 bg-sky-700 dark:bg-gradient-to-r dark:from-pgs-cyan dark:to-pgs-neon"></div>
+            <div class="flex items-center justify-between mb-6">
+                <div class="flex items-center gap-3">
+                    <div class="p-2.5 bg-sky-100 dark:bg-pgs-cyan/10 rounded-xl text-sky-800 dark:text-pgs-cyan border border-sky-300 dark:border-sky-500/20">
+                        <i data-lucide="cpu" class="w-6 h-6"></i>
+                    </div>
+                    <div>
+                        <h2 id="lineaFormTitle" class="text-base font-bold text-slate-900 dark:text-white">Ingreso de Línea / Máquina</h2>
+                        <p class="text-xs text-slate-600 dark:text-slate-400 font-medium">Capacidad instalada y parámetros de planta</p>
+                    </div>
+                </div>
+                <button id="lineaCancelBtn" onclick="cancelarLinea()" class="hidden text-xs text-rose-600 dark:text-rose-400 font-bold hover:underline flex items-center gap-1">
+                    <i data-lucide="x-circle" class="w-4 h-4"></i> Cancelar
+                </button>
+            </div>
+            <form id="lineaForm" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <input type="hidden" id="linea_edit_index" value="-1">
+                <input type="hidden" id="f_id" value="">
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Empresa *</label>
+                    ${esAdmin ? `
+                    <select id="f_empresa" required onchange="alCambiarEmpresaLinea()" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white">
+                        <option value="">Seleccione empresa...</option>
+                    </select>
+                    ` : `
+                    <input type="text" readonly value="${SESION.empresaNombre || SESION.empresa}" class="w-full bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 cursor-not-allowed">
+                    <input type="hidden" id="f_empresa" value="${SESION.empresa}">
+                    `}
+                </div>
+
+                <!-- CAMPO LÍNEA AUTOGENERADO -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Línea (Autogenerada)</label>
+                    <input type="text" id="f_linea" readonly placeholder="Calculando..." class="w-full bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-mono font-bold text-sky-700 dark:text-pgs-cyan cursor-not-allowed">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Máquina *</label>
+                    <input type="text" id="f_maquina" required placeholder="Horno Industrial" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Capacidad *</label>
+                    <input type="number" step="0.01" id="f_capacidad" required placeholder="500" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">UM *</label>
+                    <select id="f_um" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white">
+                        <option>KG</option><option>UNIDADES</option><option>L</option><option>PZA</option><option>M</option>
+                    </select>
+                </div>
+
+                <div class="md:col-span-2">
+                    <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Procesos</label>
+                    <input type="text" id="f_procesos" placeholder="Mezcla, Horneado, Empaque" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Estado</label>
+                    <select id="f_estado" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white">
+                        <option>Activo</option><option>Inactivo</option><option>Mantenimiento</option>
+                    </select>
+                </div>
+
+                <div class="lg:col-span-4 flex justify-end">
+                    <button type="submit" class="bg-slate-900 hover:bg-slate-800 dark:bg-gradient-to-r dark:from-pgs-cyan dark:to-pgs-neon text-white dark:text-slate-950 font-black py-2.5 px-6 rounded-xl text-xs uppercase tracking-wider transition flex items-center justify-center gap-2 shadow-md cursor-pointer">
+                        <i data-lucide="save" class="w-4 h-4"></i><span>Guardar Línea</span>
+                    </button>
+                </div>
+            </form>
+        </section>` : ""}
+
+        <section class="glass-panel bg-white/70 dark:bg-pgs-card/60 border border-white/30 dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden transition-all duration-300">
+            <div class="p-6 border-b border-slate-300 dark:border-pgs-border flex flex-col md:flex-row gap-4 items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="p-2.5 bg-emerald-100 dark:bg-emerald-500/10 rounded-xl text-emerald-800 dark:text-pgs-neon border border-emerald-300 dark:border-emerald-500/20">
+                        <i data-lucide="cpu" class="w-5 h-5"></i>
+                    </div>
+                    <div>
+                        <h3 class="font-bold text-slate-900 dark:text-white text-base">Líneas y Máquinas</h3>
+                        <p class="text-xs text-slate-600 dark:text-slate-400 font-medium"><span id="lineasTotal" class="font-bold text-sky-700 dark:text-pgs-cyan">0</span> registros</p>
+                    </div>
+                </div>
+                <div class="relative w-full md:w-96">
+                    <i data-lucide="search" class="w-4 h-4 absolute left-3.5 top-3 text-slate-500"></i>
+                    <input type="text" id="lineasSearch" onkeyup="filtrarLineas()" placeholder="Buscar..." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl pl-10 pr-4 py-2 text-xs font-semibold text-slate-900 dark:text-white">
+                </div>
+            </div>
+            <div class="overflow-x-auto max-h-[550px]">
+                <table class="w-full text-left text-xs text-slate-800 dark:text-slate-300">
+                    <thead class="bg-slate-200/50 dark:bg-slate-900/50 backdrop-blur-lg sticky top-0 text-slate-700 dark:text-slate-400 font-black uppercase tracking-wider border-b border-slate-300 dark:border-pgs-border z-10">
+                        <tr>
+                            <th class="p-4">ID</th><th class="p-4">Empresa</th><th class="p-4">Línea</th>
+                            <th class="p-4">Máquina</th><th class="p-4">Capacidad</th><th class="p-4">UM</th>
+                            <th class="p-4">Procesos</th><th class="p-4">Estado</th>
+                            ${puedeEditarEste || puedeEliminar("lineas") ? '<th class="p-4 text-center">Acciones</th>' : ''}
+                        </tr>
+                    </thead>
+                    <tbody id="lineasTableBody"></tbody>
+                </table>
+            </div>
+        </section>
+    `;
+    lucide.createIcons();
+
+    document.getElementById("lineaForm")?.addEventListener("submit", guardarLinea);
+
+    if (typeof google !== "undefined" && google.script) {
+        const empresaFiltro = esAdmin ? null : SESION.empresa;
+
+        // Si la empresa es fija, cargar la siguiente línea
+        if (!esAdmin && SESION.empresa) {
+            obtenerSiguienteLinea(SESION.empresa);
+        }
+
+        // Si es Admin, cargar el selector de empresas
+        if (esAdmin) {
+            google.script.run
+                .withSuccessHandler(empresas => {
+                    LINEAS_EMPRESAS_DISPONIBLES = empresas || [];
+                    const select = document.getElementById("f_empresa");
+                    if (select) {
+                        select.innerHTML = '<option value="">Seleccione empresa...</option>';
+                        LINEAS_EMPRESAS_DISPONIBLES.forEach(e => {
+                            const opt = document.createElement("option");
+                            opt.value = e.cod_empresa;
+                            opt.textContent = `${e.cod_empresa} - ${e.razon_social}`;
+                            select.appendChild(opt);
+                        });
+                    }
+                })
+                .obtenerEmpresasDesdeSheets();
+        }
+
+        // Cargar tabla de líneas
+        google.script.run
+            .withSuccessHandler(datos => {
+                LINEAS_LISTA = datos || [];
+                renderTablaLineas(LINEAS_LISTA);
+            })
+            .withFailureHandler(err => mostrarAlerta("Error: " + err.message, true))
+            .obtenerLineasMaquinasDesdeSheets(empresaFiltro);
+          
+    } else {
+        renderTablaLineas(LINEAS_LISTA);
+    }
+}
+
+function obtenerSiguienteLinea(codEmpresa) {
+    if (!codEmpresa) return;
+    const inputLinea = document.getElementById("f_linea");
+    const inputId = document.getElementById("f_id");
+    if (inputLinea) inputLinea.value = "Calculando...";
+    
+    google.script.run
+        .withSuccessHandler(res => {
+            if (inputLinea) inputLinea.value = res.linea || "";
+            if (inputId) inputId.value = res.id || "";
+        })
+        .generarDatosLinea(codEmpresa);
+}
+
+function alCambiarEmpresaLinea() {
+    const editIndex = parseInt(document.getElementById("linea_edit_index")?.value || "-1", 10);
+    if (editIndex === -1) {
+        const emp = document.getElementById("f_empresa").value;
+        if (emp) obtenerSiguienteLinea(emp);
+    }
+}
+
+function renderTablaLineas(datos) {
+    const tbody = document.getElementById("lineasTableBody");
+    if (!tbody) return;
+    const elTotal = document.getElementById("lineasTotal");
+    if (elTotal) elTotal.innerText = datos.length;
+    tbody.innerHTML = "";
+    const puedeEditarEste = puedeEditar("lineas");
+    const puedeElim = puedeEliminar("lineas");
+
+    if (!datos || datos.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="9" class="text-center py-10 text-slate-500 font-bold">No hay registros de líneas</td></tr>`;
+        return;
+    }
+
+    datos.forEach((item, index) => {
+        const tr = document.createElement("tr");
+        tr.className = "hover:bg-slate-100 dark:hover:bg-slate-800/50 transition border-b border-slate-200 dark:border-pgs-border/40";
+        tr.innerHTML = `
+            <td class="p-4 font-mono text-slate-500 text-[11px]">${item.id || '-'}</td>
+            <td class="p-4 font-mono font-bold text-slate-700 dark:text-slate-300">${item.empresa || '-'}</td>
+            <td class="p-4 font-mono font-bold text-sky-800 dark:text-pgs-cyan">${item.linea}</td>
+            <td class="p-4 font-bold text-slate-900 dark:text-white">${item.maquina}</td>
+            <td class="p-4 font-mono font-bold">${item.capacidad}</td>
+            <td class="p-4"><span class="bg-slate-200 dark:bg-slate-800 px-2 py-1 rounded text-[11px] font-bold">${item.um}</span></td>
+            <td class="p-4 text-slate-700 dark:text-slate-400">${item.procesos || '-'}</td>
+            <td class="p-4"><span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-[10px] font-black ${item.estado === 'Activo' ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-900 dark:text-emerald-400' : 'bg-rose-100 dark:bg-rose-500/10 text-rose-900 dark:text-rose-400'}">${item.estado}</span></td>
+            ${puedeEditarEste || puedeElim ? `<td class="p-4 text-center">
+                ${puedeEditarEste ? `<button onclick="editarLinea(${index})" class="p-1.5 hover:bg-sky-100 dark:hover:bg-sky-500/10 text-sky-800 dark:text-pgs-cyan rounded-lg mr-1"><i data-lucide="edit-3" class="w-4 h-4"></i></button>` : ''}
+                ${puedeElim ? `<button onclick="eliminarLinea(${index})" class="p-1.5 hover:bg-rose-100 dark:hover:bg-rose-500/10 text-rose-600 rounded-lg"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
+            </td>` : ''}
+        `;
+        tbody.appendChild(tr);
+    });
+    lucide.createIcons();
+}
+
+function guardarLinea(e) {
+    e.preventDefault();
+    const data = {
+        id: document.getElementById("f_id").value.trim(),
+        empresa: document.getElementById("f_empresa").value.trim(),
+        linea: document.getElementById("f_linea").value.trim(),
+        maquina: document.getElementById("f_maquina").value.trim(),
+        capacidad: parseFloat(document.getElementById("f_capacidad").value) || 0,
+        um: document.getElementById("f_um").value,
+        procesos: document.getElementById("f_procesos").value.trim(),
+        estado: document.getElementById("f_estado").value
+    };
+
+    if (!data.empresa) {
+        return mostrarAlerta("Debe asignar una empresa a la línea", true);
+    }
+    if (!data.linea) {
+        return mostrarAlerta("El código de línea no se ha generado", true);
+    }
+
+    google.script.run
+        .withSuccessHandler(res => {
+            if (!res.ok) return mostrarAlerta(res.error, true);
+            LINEAS_LISTA = res.registros;
+            cancelarLinea();
+            renderTablaLineas(LINEAS_LISTA);
+            mostrarAlerta("Línea guardada ✅");
+        })
+        .withFailureHandler(err => mostrarAlerta("Error: " + err.message, true))
+        .guardarLineaMaquinaEnSheets(data, SESION.cedula);
+}
+
+function editarLinea(i) {
+    const item = LINEAS_LISTA[i];
+    document.getElementById("linea_edit_index").value = i;
+    for (const k in item) {
+        const el = document.getElementById("f_" + k);
+        if (el) el.value = item[k];
+    }
+    document.getElementById("lineaFormTitle").innerText = "Modificando: " + item.linea;
+    document.getElementById("lineaCancelBtn").classList.remove("hidden");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function cancelarLinea() {
+    document.getElementById("lineaForm").reset();
+    document.getElementById("linea_edit_index").value = -1;
+    document.getElementById("f_id").value = "";
+    
+    const esAdmin = SESION.perfil === "Administrador" || SESION.empresa === "GLOBAL";
+    if (!esAdmin && SESION.empresa) {
+        const elEmpresa = document.getElementById("f_empresa");
+        if (elEmpresa) elEmpresa.value = SESION.empresa;
+        obtenerSiguienteLinea(SESION.empresa);
+    } else {
+        document.getElementById("f_linea").value = "";
+    }
+
+    document.getElementById("lineaFormTitle").innerText = "Ingreso de Línea / Máquina";
+    document.getElementById("lineaCancelBtn").classList.add("hidden");
+}
+
+function eliminarLinea(i) {
+    const item = LINEAS_LISTA[i];
+    confirmar("¿Eliminar la línea <b>" + item.linea + "</b> (" + item.maquina + ")? Esta acción no se puede deshacer.", () => {
+        google.script.run
+            .withSuccessHandler(res => {
+                if (!res.ok) return mostrarAlerta(res.error, true);
+                LINEAS_LISTA = res.registros;
+                renderTablaLineas(LINEAS_LISTA);
+                mostrarAlerta("Línea eliminada ✅");
+            })
+            .withFailureHandler(err => mostrarAlerta("Error: " + err.message, true))
+            .eliminarLineaMaquinaEnSheets(item.id, SESION.cedula);
+    });
+}
+
+function filtrarLineas() {
+    const q = document.getElementById("lineasSearch").value.toLowerCase();
+    renderTablaLineas(LINEAS_LISTA.filter(item => Object.values(item).some(v => String(v).toLowerCase().includes(q))));
+}
+</script>

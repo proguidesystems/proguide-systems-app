@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PGS - PROGUIDE SYSTEMS</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: { extend: { colors: { pgs: { bg: '#080C14', card: '#0F172A', border: '#1E293B', cyan: '#00D2FF', neon: '#00D2FF' } } } }
+        }
+    </script>
+    <style>
+        .bg-tech-dark {
+            background-color: #030712;
+            background-image: 
+                radial-gradient(circle at 80% 20%, rgba(0, 210, 255, 0.15) 0%, transparent 40%),
+                radial-gradient(circle at 20% 80%, rgba(147, 51, 234, 0.15) 0%, transparent 40%),
+                url("data:image/svg+xml,%3Csvg width='120' height='120' viewBox='0 0 120 120' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='%2300D2FF' stroke-width='1' stroke-opacity='0.15'%3E%3Cpath d='M0 30h30v30h30v-30h30M120 30h-30v30h-30v-30h-30'/%3E%3Cpath d='M30 0v30h30v30h30v-30h30M30 120v-30h30v-30h30v30h30'/%3E%3Ccircle cx='30' cy='30' r='3' fill='%2300D2FF' fill-opacity='0.5'/%3E%3Ccircle cx='90' cy='30' r='3' fill='%2300D2FF' fill-opacity='0.5'/%3E%3Ccircle cx='30' cy='90' r='3' fill='%2300D2FF' fill-opacity='0.5'/%3E%3Ccircle cx='90' cy='90' r='3' fill='%2300D2FF' fill-opacity='0.5'/%3E%3C/g%3E%3C/svg%3E");
+            background-size: 100% 100%, 100% 100%, 120px 120px;
+            background-attachment: fixed;
+        }
+        .glow-brand { filter: drop-shadow(0 0 15px rgba(0, 210, 255, 0.4)); }
+        .loader-ring {
+            border: 4px solid rgba(0, 210, 255, 0.15);
+            border-top-color: #00D2FF;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-tech-dark text-slate-900 dark:text-slate-100 font-sans min-h-screen flex items-center justify-center transition-colors duration-300 relative overflow-hidden">
+
+    <!-- PANTALLA DE CARGA CON LOGO CENTRAL -->
+    <div id="globalLoader" class="fixed inset-0 z-[100] bg-tech-dark hidden flex-col items-center justify-center">
+        <div class="relative w-28 h-28 mb-6 flex items-center justify-center">
+            <div class="absolute inset-0 border-4 border-slate-800 rounded-full"></div>
+            <div class="absolute inset-0 loader-ring rounded-full"></div>
+            <div class="w-16 h-16 rounded-xl overflow-hidden p-1 bg-black/60 border border-slate-700/80 shadow-[0_0_15px_rgba(0,210,255,0.3)] flex items-center justify-center z-10">
+                <img src="https://lh3.googleusercontent.com/d/1yeZKaOAb6ODW90wSZn5je9uYtn1rcrc_" alt="PGS" class="w-full h-full object-cover rounded-lg">
+            </div>
+        </div>
+        <h2 class="text-xl font-black text-white uppercase tracking-widest mb-2">Cargando Sistema</h2>
+        <p class="text-xs text-[#00D2FF] font-bold tracking-widest">Sincronizando datos seguros...</p>
+    </div>
+
+    <div id="loginWrapper" class="w-full max-w-md px-4 transition-opacity duration-300">
+        <div class="text-center mb-8 flex flex-col items-center">
+            <div class="w-32 h-32 mb-5 flex items-center justify-center overflow-hidden rounded-2xl border-2 border-slate-700 bg-black shadow-[0_0_30px_rgba(0,210,255,0.2)] glow-brand">
+                <img src="https://lh3.googleusercontent.com/d/1yeZKaOAb6ODW90wSZn5je9uYtn1rcrc_" alt="PGS Logo" class="w-full h-full object-cover">
+            </div>
+            <h1 class="text-sm font-black tracking-[0.2em] text-white uppercase text-center leading-tight drop-shadow-md">
+                Gestor y Visualizador
+            </h1>
+            <p class="text-xs text-[#00D2FF] font-bold tracking-[0.4em] uppercase mt-2 text-center drop-shadow-md">
+                De Procesos
+            </p>
+        </div>
+
+        <div class="bg-white/95 dark:bg-pgs-card/95 border border-slate-300 dark:border-slate-700 rounded-2xl p-8 shadow-[0_0_50px_rgba(0,210,255,0.1)] relative overflow-hidden backdrop-blur-xl">
+            <div class="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-pgs-cyan to-pgs-neon"></div>
+
+            <div class="flex items-center gap-3 mb-6">
+                <div class="p-2.5 bg-sky-100 dark:bg-pgs-cyan/10 rounded-xl text-sky-800 dark:text-pgs-cyan border border-sky-300 dark:border-sky-500/20">
+                    <i data-lucide="shield-check" class="w-6 h-6"></i>
+                </div>
+                <div>
+                    <h2 class="text-base font-bold text-slate-900 dark:text-white">Iniciar Sesión</h2>
+                    <p class="text-xs text-slate-600 dark:text-slate-400 font-medium">Acceso al sistema</p>
+                </div>
+            </div>
+
+            <div id="errorMsg" class="hidden mb-4 p-3 rounded-xl bg-rose-100 dark:bg-rose-500/10 border border-rose-300 dark:border-rose-500/30 text-rose-800 dark:text-rose-400 text-xs font-bold flex items-center gap-2">
+                <i data-lucide="alert-circle" class="w-4 h-4"></i>
+                <span id="errorText"></span>
+            </div>
+
+            <form id="loginForm" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Cédula</label>
+                    <div class="relative">
+                        <i data-lucide="user" class="w-4 h-4 absolute left-3.5 top-3 text-slate-500"></i>
+                        <input type="text" id="cedula" required placeholder="Ej: 1000" autocomplete="username"
+                            class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl pl-10 pr-4 py-2.5 text-sm font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-600 dark:focus:ring-pgs-cyan focus:outline-none transition">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Contraseña</label>
+                    <div class="relative">
+                        <i data-lucide="lock" class="w-4 h-4 absolute left-3.5 top-3 text-slate-500"></i>
+                        <input type="password" id="password" required placeholder="••••••••" autocomplete="current-password"
+                            class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-slate-700 rounded-xl pl-10 pr-4 py-2.5 text-sm font-semibold text-slate-900 dark:text-white focus:ring-2 focus:ring-sky-600 dark:focus:ring-pgs-cyan focus:outline-none transition">
+                    </div>
+                </div>
+
+                <button type="submit" id="loginBtn"
+                    class="w-full bg-slate-900 hover:bg-slate-800 dark:bg-gradient-to-r dark:from-pgs-cyan dark:to-pgs-neon dark:hover:opacity-90 text-white dark:text-slate-950 font-black py-3 px-4 rounded-xl text-sm uppercase tracking-wider transition flex items-center justify-center gap-2 shadow-[0_0_20px_rgba(0,210,255,0.3)] cursor-pointer mt-6">
+                    <i data-lucide="log-in" class="w-4 h-4"></i>
+                    <span>Ingresar</span>
+                </button>
+            </form>
+
+            <p class="text-[10px] text-slate-500 dark:text-slate-400 text-center mt-6 font-medium">
+                ¿Olvidaste tu contraseña? Contacta al administrador del sistema
+            </p>
+        </div>
+
+        <p class="text-center text-[10px] text-slate-500 dark:text-slate-500 mt-6 font-bold">
+            ProGuide Systems © 2026 - TdeA | Ingeniería en Software
+        </p>
+    </div>
+
+    <script>
+        lucide.createIcons();
+
+        function activarCargador() {
+            document.getElementById('loginWrapper').classList.add('opacity-0');
+            setTimeout(() => {
+                document.getElementById('loginWrapper').classList.add('hidden');
+                document.getElementById('globalLoader').classList.remove('hidden');
+                document.getElementById('globalLoader').classList.add('flex');
+            }, 300);
+        }
+
+        function entrarDirecto() {
+            google.script.run
+                .withSuccessHandler((html) => {
+                    document.open();
+                    document.write(html);
+                    document.close();
+                })
+                .withFailureHandler((err) => {
+                    mostrarError("Error al cargar la aplicación: " + err.message);
+                    document.getElementById('globalLoader').classList.add('hidden');
+                    document.getElementById('globalLoader').classList.remove('flex');
+                    document.getElementById('loginWrapper').classList.remove('hidden', 'opacity-0');
+                    lucide.createIcons();
+                })
+                .obtenerAppHTML();
+        }
+
+        document.getElementById("loginForm").addEventListener("submit", (e) => {
+            e.preventDefault();
+            const cedula = document.getElementById("cedula").value.trim();
+            const password = document.getElementById("password").value;
+
+            if (!cedula || !password) {
+                mostrarError("Complete todos los campos");
+                return;
+            }
+
+            activarCargador();
+
+            google.script.run
+                .withSuccessHandler((res) => {
+                    if (res.ok) {
+                        localStorage.setItem("pgs_sesion", JSON.stringify(res.usuario));
+                        entrarDirecto();
+                    } else {
+                        document.getElementById('globalLoader').classList.add('hidden');
+                        document.getElementById('globalLoader').classList.remove('flex');
+                        document.getElementById('loginWrapper').classList.remove('hidden', 'opacity-0');
+                        mostrarError(res.error);
+                        lucide.createIcons();
+                    }
+                })
+                .withFailureHandler((err) => {
+                    document.getElementById('globalLoader').classList.add('hidden');
+                    document.getElementById('globalLoader').classList.remove('flex');
+                    document.getElementById('loginWrapper').classList.remove('hidden', 'opacity-0');
+                    mostrarError("Error de conexión: " + err.message);
+                    lucide.createIcons();
+                })
+                .loginUsuario(cedula, password);
+        });
+
+        function mostrarError(msg) {
+            document.getElementById("errorText").innerText = msg;
+            document.getElementById("errorMsg").classList.remove("hidden");
+            lucide.createIcons();
+        }
+
+        // Auto-login directo
+        const sesionGuardada = localStorage.getItem("pgs_sesion");
+        if (sesionGuardada) {
+            try {
+                const s = JSON.parse(sesionGuardada);
+                if (s.expira && new Date(s.expira) > new Date()) {
+                    activarCargador();
+                    entrarDirecto();
+                } else {
+                    localStorage.removeItem("pgs_sesion");
+                }
+            } catch (e) {
+                localStorage.removeItem("pgs_sesion");
+            }
+        }
+    </script>
+</body>
+</html>

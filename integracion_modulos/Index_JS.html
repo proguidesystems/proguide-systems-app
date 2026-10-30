@@ -1,0 +1,252 @@
+<script>
+let SESION = null;
+let MODULO_ACTIVO = null;
+let CIERRE_SESION_EN_CURSO = false;
+
+// Módulos y Dashboards propios de este proyecto operativo
+const MODULOS_WEB = {
+    pedidos:       { titulo: "Pedidos",              icono: "clipboard-list", render: () => renderModuloPedidos() },
+    programacion:  { titulo: "Programación",         icono: "calendar-clock", render: () => renderModuloProgramacion() },
+    planta:        { titulo: "Planta",               icono: "factory",        render: () => renderModuloPlanta() },
+    dash_kam:      { titulo: "Dashboard Comercial",  icono: "pie-chart",      render: () => renderModuloDashboardKAM() },
+    dash_plan:     { titulo: "Dashboard Capacidad",  icono: "bar-chart-3",    render: () => renderModuloDashboardPlanificador() },
+    dash_planta:   { titulo: "Dashboard Planta",     icono: "activity",       render: () => renderModuloDashboardPlanta() }
+};
+
+document.addEventListener("DOMContentLoaded", iniciarAplicacion);
+
+function iniciarAplicacion() {
+    try {
+        initTheme();
+        if (!cargarSesion()) {
+            mostrarPantallaIngreso();
+            return;
+        }
+        construirTabs();
+    } catch (error) {
+        console.error("Error al iniciar la aplicación:", error);
+    } finally {
+        setTimeout(() => {
+            if (CIERRE_SESION_EN_CURSO) return;
+            const loader = document.getElementById("appLoader");
+            const content = document.getElementById("appContent");
+            if (loader) { loader.style.opacity = "0"; setTimeout(() => { loader.style.display = "none"; }, 500); }
+            if (content) content.classList.remove("opacity-0");
+            document.body.classList.remove("overflow-hidden");
+        }, 400);
+    }
+}
+
+function cargarSesion() {
+    try {
+        const sesionGuardada = localStorage.getItem("pgs_sesion");
+        SESION = sesionGuardada ? JSON.parse(sesionGuardada) : null;
+    } catch (error) { SESION = null; }
+
+    if (!SESION || typeof SESION !== "object" || !SESION.perfil) { 
+        SESION = null; 
+        return false; 
+    }
+
+    const elUsuario = document.getElementById("headerUsuario");
+    const elPerfil = document.getElementById("headerPerfil");
+    if (elUsuario) elUsuario.innerText = SESION.nombre || "Usuario";
+    if (elPerfil) elPerfil.innerText = SESION.perfil + " · " + (SESION.empresa || "");
+    return true;
+}
+
+function mostrarPantallaIngreso() {
+    CIERRE_SESION_EN_CURSO = true;
+    document.body.innerHTML = `
+        <div class="fixed inset-0 z-[9999] bg-[#030712] flex flex-col items-center justify-center">
+            <div class="relative w-28 h-28 mb-6 flex items-center justify-center">
+                <div class="absolute inset-0 border-4 border-slate-800 rounded-full"></div>
+                <div class="absolute inset-0 border-4 border-[#00D2FF] border-t-transparent rounded-full animate-spin"></div>
+                <div class="w-16 h-16 rounded-xl overflow-hidden p-1 bg-black/60 border border-slate-700/80 shadow-[0_0_15px_rgba(0,210,255,0.3)] flex items-center justify-center z-10">
+                    <img src="https://lh3.googleusercontent.com/d/1yeZKaOAb6ODW90wSZn5je9uYtn1rcrc_" alt="PGS" class="w-full h-full object-cover rounded-lg">
+                </div>
+            </div>
+            <h2 class="text-lg font-black text-white uppercase tracking-widest mb-2">Redirigiendo</h2>
+            <p class="text-xs text-[#00D2FF] font-bold tracking-widest">Preparando acceso seguro...</p>
+        </div>
+    `;
+    if (typeof lucide !== "undefined") lucide.createIcons();
+
+    google.script.run
+        .withSuccessHandler((html) => {
+            document.open();
+            document.write(html);
+            document.close();
+        })
+        .obtenerLoginHTML();
+}
+
+
+function construirTabs() {
+    const nav = document.getElementById("tabsNav");
+    if (!nav) return;
+    nav.innerHTML = "";
+
+    if (!SESION || !SESION.perfil) { mostrarPantallaIngreso(); return; }
+
+    const perfil = SESION.perfil.trim();
+    const esAdmin = perfil === "Administrador";
+
+    const modulosPermitidos = [];
+
+    if (esAdmin) {
+        modulosPermitidos.push("pedidos", "programacion", "planta", "dash_kam", "dash_plan", "dash_planta");
+    } else if (perfil === "KAM Logístico") {
+        modulosPermitidos.push("pedidos", "dash_kam");
+    } else if (perfil === "Planificador") {
+        modulosPermitidos.push("programacion", "dash_plan");
+    } else if (perfil === "Coordinador planta") {
+        modulosPermitidos.push("planta", "dash_planta");
+    } else if (perfil === "Operario") {
+        modulosPermitidos.push("planta");
+    } else if (perfil === "Gerente Alianza") {
+        // Acceso analítico a todos los tableros de control
+        modulosPermitidos.push("dash_kam", "dash_plan", "dash_planta");
+    } else if (perfil === "Abastecimiento") {
+        // Demanda comercial, tableros y seguimiento de capacidad
+        modulosPermitidos.push("pedidos", "dash_kam", "dash_plan");
+    }
+
+    modulosPermitidos.forEach(key => {
+        if (MODULOS_WEB[key]) {
+            const btn = document.createElement("button");
+            btn.className = "tab-btn";
+            btn.dataset.modulo = key;
+            btn.innerHTML = `<i data-lucide="${MODULOS_WEB[key].icono}" class="w-4 h-4 inline-block mr-2 -mt-0.5"></i>${MODULOS_WEB[key].titulo}`;
+            btn.onclick = () => activarModulo(key);
+            nav.appendChild(btn);
+        }
+    });
+    
+    if (typeof lucide !== "undefined") lucide.createIcons();
+
+    const primerTab = nav.querySelector(".tab-btn");
+    if (primerTab) {
+        activarModulo(primerTab.dataset.modulo);
+    } else {
+        const container = document.getElementById("modulosContainer");
+        if (container) container.innerHTML = `<div class="text-center py-20 text-slate-500 font-bold">No tienes acceso a ningún módulo disponible</div>`;
+    }
+}
+
+
+
+function activarModulo(key) {
+    if (CIERRE_SESION_EN_CURSO || !SESION || !MODULOS_WEB[key]) return;
+    MODULO_ACTIVO = key;
+    document.querySelectorAll(".tab-btn").forEach(btn => {
+        btn.classList.toggle("active", btn.dataset.modulo === key);
+    });
+    try { 
+        MODULOS_WEB[key].render(); 
+    } catch (e) { 
+        console.error("Error al renderizar " + key + ":", e); 
+    }
+}
+
+function initTheme() {
+    let tema = "dark";
+    try { tema = localStorage.getItem("theme") || "dark"; } catch (error) {}
+    const isDark = tema !== "light";
+    document.documentElement.classList.toggle("dark", isDark);
+    updateThemeIcon(isDark);
+}
+
+function toggleTheme() {
+    const isDark = document.documentElement.classList.toggle("dark");
+    try { localStorage.setItem("theme", isDark ? "dark" : "light"); } catch (error) {}
+    updateThemeIcon(isDark);
+}
+
+function updateThemeIcon(isDark) {
+    const icon = document.getElementById("themeIcon");
+    if (!icon) return;
+    icon.setAttribute("data-lucide", isDark ? "sun" : "moon");
+    if (typeof lucide !== "undefined") lucide.createIcons();
+}
+
+function mostrarAlerta(msg, esError = false) {
+    const alertBox = document.getElementById("statusAlert");
+    const alertMsg = document.getElementById("statusMessage");
+    if (!alertBox || !alertMsg) return console.log(msg);
+    alertBox.className = `p-4 rounded-xl border text-xs font-bold flex items-center justify-between transition-all backdrop-blur-md shadow-lg ${esError ? "bg-rose-100/90 dark:bg-rose-500/10 border-rose-300 dark:border-rose-500/30 text-rose-800 dark:text-rose-400" : "bg-emerald-100/90 dark:bg-emerald-500/10 border-emerald-300 dark:border-emerald-500/30 text-emerald-900 dark:text-emerald-400"}`;
+    alertMsg.innerText = msg;
+    alertBox.classList.remove("hidden");
+    setTimeout(() => { if (alertBox.isConnected) alertBox.classList.add("hidden"); }, 4000);
+}
+
+function confirmar(mensaje, onAceptar) {
+    const existente = document.getElementById("pgsConfirmOverlay");
+    if (existente) existente.remove();
+    const overlay = document.createElement("div");
+    overlay.id = "pgsConfirmOverlay";
+    overlay.className = "fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4";
+    overlay.innerHTML = `
+        <div class="bg-white/95 dark:bg-pgs-card/95 border border-slate-300 dark:border-pgs-border rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 backdrop-blur-xl">
+            <div class="flex items-center gap-3">
+                <div class="p-3 bg-amber-100 dark:bg-amber-500/10 rounded-xl border border-amber-300 dark:border-amber-500/30">
+                    <i data-lucide="alert-triangle" class="w-6 h-6 text-amber-600 dark:text-amber-400"></i>
+                </div>
+                <div>
+                    <h4 class="text-base font-bold text-slate-900 dark:text-white">Confirmar acción</h4>
+                    <p class="text-[11px] text-slate-500 dark:text-slate-400 font-medium">Esta acción requiere tu confirmación</p>
+                </div>
+            </div>
+            <p id="pgsConfirmMessage" class="text-sm text-slate-700 dark:text-slate-300 font-medium leading-relaxed"></p>
+            <div class="flex items-center justify-end gap-3 pt-2">
+                <button id="pgsConfirmCancel" class="px-4 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-bold transition">Cancelar</button>
+                <button id="pgsConfirmOk" class="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition flex items-center gap-2 shadow-md">
+                    <i data-lucide="check" class="w-4 h-4"></i> Confirmar
+                </button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+    document.getElementById("pgsConfirmMessage").innerHTML = mensaje;
+    if (typeof lucide !== "undefined") lucide.createIcons();
+    const cerrar = () => overlay.remove();
+    document.getElementById("pgsConfirmCancel").onclick = cerrar;
+    document.getElementById("pgsConfirmOk").onclick = () => { cerrar(); if (typeof onAceptar === "function") onAceptar(); };
+    overlay.addEventListener("click", (e) => { if (e.target === overlay) cerrar(); });
+}
+
+function cerrarSesion() {
+    if (CIERRE_SESION_EN_CURSO) return;
+    confirmar("¿Estás seguro de que deseas cerrar la sesión?", () => {
+        CIERRE_SESION_EN_CURSO = true;
+        try { localStorage.removeItem("pgs_sesion"); sessionStorage.removeItem("pgs_sesion"); } catch (e) {}
+        SESION = null;
+        MODULO_ACTIVO = null;
+        document.body.innerHTML = `
+            <div class="fixed inset-0 z-[9999] bg-[#030712] flex flex-col items-center justify-center">
+                <div class="relative w-28 h-28 mb-6 flex items-center justify-center">
+                    <div class="absolute inset-0 border-4 border-slate-800 rounded-full"></div>
+                    <div class="absolute inset-0 border-4 border-rose-500 border-t-transparent rounded-full animate-spin"></div>
+                    <div class="w-16 h-16 rounded-xl overflow-hidden p-1 bg-black/60 border border-slate-700/80 shadow-[0_0_15px_rgba(244,63,94,0.3)] flex items-center justify-center z-10">
+                        <img src="https://lh3.googleusercontent.com/d/1yeZKaOAb6ODW90wSZn5je9uYtn1rcrc_" alt="PGS" class="w-full h-full object-cover rounded-lg">
+                    </div>
+                </div>
+                <h2 class="text-lg font-black text-white uppercase tracking-widest mb-2">Cerrando Sesión</h2>
+                <p class="text-xs text-rose-500 font-bold tracking-widest">Sincronizando salida...</p>
+            </div>
+        `;
+        if (typeof lucide !== "undefined") lucide.createIcons();
+
+        google.script.run
+            .withSuccessHandler((html) => {
+                document.open();
+                document.write(html);
+                document.close();
+            })
+            .withFailureHandler(() => {
+                mostrarPantallaIngreso();
+            })
+            .obtenerLoginHTML();
+    });
+}
+</script>

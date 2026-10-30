@@ -1,0 +1,223 @@
+<script>
+let DESTINATARIOS_LISTA = [];
+let DEST_EMPRESAS_DISPONIBLES = [];
+
+function renderModuloDestinatarios() {
+    const puedeEditarEste = puedeEditar("destinatarios");
+    const puedeElim = puedeEliminar("destinatarios");
+    const container = document.getElementById("modulosContainer");
+    
+    // Validación unificada para Admin o Global
+    const esAdmin = SESION.perfil === "Administrador" || SESION.empresa === "GLOBAL";
+
+    container.innerHTML = `
+        ${puedeEditarEste ? `
+        <section class="glass-panel bg-white/70 dark:bg-pgs-card/60 border border-white/30 dark:border-white/10 rounded-2xl p-6 shadow-2xl relative overflow-hidden mb-8 transition-all duration-300">
+            <div class="absolute top-0 left-0 w-full h-1.5 bg-sky-700 dark:bg-gradient-to-r dark:from-pgs-cyan dark:to-pgs-neon"></div>
+            <div class="flex items-center gap-3 mb-6">
+                <div class="p-2.5 bg-sky-100 dark:bg-pgs-cyan/10 rounded-xl text-sky-800 dark:text-pgs-cyan border border-sky-300 dark:border-sky-500/20"><i data-lucide="users" class="w-6 h-6"></i></div>
+                <h2 id="destFormTitle" class="text-base font-bold text-slate-900 dark:text-white">Registro de Destinatario</h2>
+                <button id="destCancelBtn" onclick="cancelarDestinatario()" class="hidden ml-auto text-xs text-rose-600 dark:text-rose-400 font-bold hover:underline">Cancelar</button>
+            </div>
+            <form id="destForm" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <input type="hidden" id="dest_edit_index" value="-1">
+                
+                <!-- CAMPO AUTOGENERADO -->
+                <div>
+                    <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Cod destinatario</label>
+                    <input type="text" id="d_cod_destinatario" readonly placeholder="Generando..." class="w-full bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-500 cursor-not-allowed">
+                </div>
+                
+                <div><label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Nombre *</label><input type="text" id="d_nombre_destinatario" required placeholder="COLANTA ITAGUI" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white"></div>
+                <div><label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Correo</label><input type="email" id="d_correo" placeholder="recibo@cliente.com" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white"></div>
+                <div><label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Teléfono</label><input type="tel" id="d_telefono" placeholder="3015668479" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white"></div>
+                
+                ${esAdmin ? `
+                <div>
+                    <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Código empresa *</label>
+                    <select id="d_codigo_empresa" required class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white">
+                        <option value="">Seleccione empresa...</option>
+                    </select>
+                </div>
+                ` : `
+                <div>
+                    <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Empresa</label>
+                    <input type="text" readonly value="${SESION.empresaNombre || SESION.empresa}" class="w-full bg-slate-200 dark:bg-slate-800 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold text-slate-500 cursor-not-allowed">
+                    <input type="hidden" id="d_codigo_empresa" value="${SESION.empresa}">
+                </div>
+                `}
+
+                <div><label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Estado</label><select id="d_estado_destinatario" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold text-slate-900 dark:text-white"><option>Activo</option><option>Inactivo</option></select></div>
+                <div class="lg:col-span-3 flex justify-end">
+                    <button type="submit" class="bg-slate-900 dark:bg-gradient-to-r dark:from-pgs-cyan dark:to-pgs-neon text-white dark:text-slate-950 font-black py-2.5 px-6 rounded-xl text-xs uppercase tracking-wider flex items-center gap-2 shadow-md cursor-pointer">
+                        <i data-lucide="save" class="w-4 h-4"></i><span>Guardar Destinatario</span>
+                    </button>
+                </div>
+            </form>
+        </section>` : ""}
+
+        <section class="glass-panel bg-white/70 dark:bg-pgs-card/60 border border-white/30 dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden transition-all duration-300">
+            <div class="p-6 border-b border-slate-300 dark:border-pgs-border flex flex-col md:flex-row gap-4 items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="p-2.5 bg-emerald-100 dark:bg-emerald-500/10 rounded-xl text-emerald-800 dark:text-pgs-neon border border-emerald-300 dark:border-emerald-500/20"><i data-lucide="database" class="w-5 h-5"></i></div>
+                    <div><h3 class="font-bold text-slate-900 dark:text-white text-base">Destinatarios</h3><p class="text-xs text-slate-600 dark:text-slate-400"><span id="destTotal" class="font-bold text-sky-700 dark:text-pgs-cyan">0</span> registros</p></div>
+                </div>
+                <input type="text" id="destSearch" onkeyup="filtrarDestinatario()" placeholder="Buscar..." class="w-full md:w-96 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-4 py-2 text-xs font-semibold text-slate-900 dark:text-white">
+            </div>
+            <div class="overflow-x-auto max-h-[550px]">
+                <table class="w-full text-left text-xs">
+                    <thead class="bg-slate-200/50 dark:bg-slate-900/50 backdrop-blur-lg sticky top-0 text-slate-700 dark:text-slate-400 font-black uppercase tracking-wider border-b border-slate-300 dark:border-pgs-border z-10">
+                        <tr>
+                            <th class="p-4">Código</th><th class="p-4">Nombre</th><th class="p-4">Correo</th>
+                            <th class="p-4">Teléfono</th><th class="p-4">Empresa</th><th class="p-4">Estado</th>
+                            ${puedeEditarEste || puedeElim ? '<th class="p-4 text-center">Acciones</th>' : ''}
+                        </tr>
+                    </thead>
+                    <tbody id="destTableBody"></tbody>
+                </table>
+            </div>
+        </section>
+    `;
+    lucide.createIcons();
+    document.getElementById("destForm")?.addEventListener("submit", guardarDestinatario);
+
+    if (typeof google !== "undefined" && google.script) {
+        // Autogenerar código
+        google.script.run.withSuccessHandler(codigo => {
+            const inputCod = document.getElementById("d_cod_destinatario");
+            if (inputCod) inputCod.value = codigo;
+        }).generarCodDestinatario();
+
+        // Cargar empresas con la clave correcta (cod_empresa)
+        if (esAdmin) {
+            google.script.run.withSuccessHandler(empresas => {
+                DEST_EMPRESAS_DISPONIBLES = empresas || [];
+                const select = document.getElementById("d_codigo_empresa");
+                if (select) {
+                    select.innerHTML = '<option value="">Seleccione empresa...</option>';
+                    DEST_EMPRESAS_DISPONIBLES.forEach(e => {
+                        const opt = document.createElement("option");
+                        opt.value = e.cod_empresa;
+                        opt.textContent = e.cod_empresa + " - " + e.razon_social;
+                        select.appendChild(opt);
+                    });
+                }
+            }).obtenerEmpresasDesdeSheets();
+        }
+
+        const empresaFiltro = esAdmin ? null : SESION.empresa;
+        
+        google.script.run.withSuccessHandler(datos => { 
+            DESTINATARIOS_LISTA = datos || []; 
+            renderTablaDestinatario(DESTINATARIOS_LISTA); 
+        })
+        .withFailureHandler(err => mostrarAlerta("Error: " + err.message, true))
+        .obtenerDestinatariosDesdeSheets(empresaFiltro);
+    } else {
+        renderTablaDestinatario(DESTINATARIOS_LISTA);
+    }
+}
+
+function renderTablaDestinatario(datos) {
+    const tbody = document.getElementById("destTableBody");
+    if (!tbody) return;
+    const elTotal = document.getElementById("destTotal");
+    if (elTotal) elTotal.innerText = datos.length;
+    tbody.innerHTML = "";
+    const puedeEditarEste = puedeEditar("destinatarios");
+    const puedeElim = puedeEliminar("destinatarios");
+
+    if (!datos || datos.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="7" class="text-center py-10 text-slate-500 font-bold">No hay destinatarios</td></tr>`;
+        return;
+    }
+    datos.forEach((item, index) => {
+        const tr = document.createElement("tr");
+        tr.className = "hover:bg-slate-100 dark:hover:bg-slate-800/50 border-b border-slate-200 dark:border-pgs-border/40 transition-colors";
+        tr.innerHTML = `
+            <td class="p-4 font-mono font-bold text-sky-800 dark:text-pgs-cyan">${item.cod_destinatario}</td>
+            <td class="p-4 font-bold text-slate-900 dark:text-white">${item.nombre_destinatario}</td>
+            <td class="p-4 text-slate-600 dark:text-slate-400">${item.correo || '-'}</td>
+            <td class="p-4">${item.telefono || '-'}</td>
+            <td class="p-4 font-mono font-bold text-slate-700 dark:text-slate-300">${item.codigo_empresa}</td>
+            <td class="p-4"><span class="px-2 py-1 rounded text-[10px] font-black ${item.estado_destinatario === 'Activo' ? 'bg-emerald-100 dark:bg-emerald-500/10 text-emerald-900 dark:text-emerald-400' : 'bg-rose-100 dark:bg-rose-500/10 text-rose-900 dark:text-rose-400'}">${item.estado_destinatario}</span></td>
+            ${puedeEditarEste || puedeElim ? `<td class="p-4 text-center">
+                ${puedeEditarEste ? `<button onclick="editarDestinatario(${index})" class="p-1.5 hover:bg-sky-100 dark:hover:bg-sky-500/10 text-sky-800 dark:text-pgs-cyan rounded-lg mr-1"><i data-lucide="edit-3" class="w-4 h-4"></i></button>` : ''}
+                ${puedeElim ? `<button onclick="eliminarDestinatario(${index})" class="p-1.5 hover:bg-rose-100 dark:hover:bg-rose-500/10 text-rose-600 rounded-lg"><i data-lucide="trash-2" class="w-4 h-4"></i></button>` : ''}
+            </td>` : ''}
+        `;
+        tbody.appendChild(tr);
+    });
+    lucide.createIcons();
+}
+
+function guardarDestinatario(e) {
+    e.preventDefault();
+    const data = {
+        cod_destinatario: document.getElementById("d_cod_destinatario").value.trim(),
+        nombre_destinatario: document.getElementById("d_nombre_destinatario").value.trim(),
+        correo: document.getElementById("d_correo").value.trim(),
+        telefono: document.getElementById("d_telefono").value.trim(),
+        codigo_empresa: document.getElementById("d_codigo_empresa").value.trim(),
+        estado_destinatario: document.getElementById("d_estado_destinatario").value
+    };
+    google.script.run.withSuccessHandler(res => {
+        if (!res.ok) return mostrarAlerta(res.error, true);
+        DESTINATARIOS_LISTA = res.registros; 
+        cancelarDestinatario(); 
+        renderTablaDestinatario(DESTINATARIOS_LISTA);
+        mostrarAlerta("Destinatario guardado ✅");
+    }).withFailureHandler(err => mostrarAlerta("Error: " + err.message, true))
+      .guardarDestinatarioEnSheets(data, SESION.cedula);
+}
+
+function editarDestinatario(i) {
+    const item = DESTINATARIOS_LISTA[i];
+    document.getElementById("dest_edit_index").value = i;
+    for (const k in item) { 
+        const el = document.getElementById("d_" + k); 
+        if (el) el.value = item[k]; 
+    }
+    document.getElementById("destFormTitle").innerText = "Modificando: " + item.cod_destinatario;
+    document.getElementById("destCancelBtn").classList.remove("hidden");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+function cancelarDestinatario() {
+    document.getElementById("destForm").reset();
+    document.getElementById("dest_edit_index").value = -1;
+    
+    if (SESION.perfil !== "Administrador" && SESION.empresa !== "GLOBAL") {
+        document.getElementById("d_codigo_empresa").value = SESION.empresa;
+    }
+
+    if (typeof google !== "undefined" && google.script) {
+        google.script.run.withSuccessHandler(codigo => {
+            const inputCod = document.getElementById("d_cod_destinatario");
+            if (inputCod) inputCod.value = codigo;
+        }).generarCodDestinatario();
+    }
+    
+    document.getElementById("destFormTitle").innerText = "Registro de Destinatario";
+    document.getElementById("destCancelBtn").classList.add("hidden");
+}
+
+function eliminarDestinatario(i) {
+    confirmar("¿Eliminar a <b>" + DESTINATARIOS_LISTA[i].nombre_destinatario + "</b>?", () => {
+        google.script.run
+            .withSuccessHandler(res => {
+                if (!res.ok) return mostrarAlerta(res.error, true);
+                DESTINATARIOS_LISTA = res.registros;
+                renderTablaDestinatario(DESTINATARIOS_LISTA);
+                mostrarAlerta("Destinatario eliminado ✅");
+            })
+            .withFailureHandler(err => mostrarAlerta("Error: " + err.message, true))
+            .eliminarDestinatarioEnSheets(DESTINATARIOS_LISTA[i].cod_destinatario, SESION.cedula);
+    });
+}
+
+function filtrarDestinatario() {
+    const q = document.getElementById("destSearch").value.toLowerCase();
+    renderTablaDestinatario(DESTINATARIOS_LISTA.filter(item => Object.values(item).some(v => String(v).toLowerCase().includes(q))));
+}
+</script>

@@ -1,0 +1,790 @@
+<script>
+let PEDIDOS = [];
+let PEDIDOS_AGRUPADOS = [];
+let PEDIDOS_EXPANDIDOS = new Set();
+let CATALOGO_DESTINATARIOS = [];
+let CATALOGO_SKUS = [];
+let CATALOGO_EMPRESAS = [];
+let ESTADOS_DERIVADOS = {};
+
+let FILTRO_EMPRESA_TABLA = "";
+let FILTRO_ESTADO_TABLA = "";
+let FILTRO_URGENCIA_TABLA = "";
+let FILTRO_FECHA_INICIO = "";
+let FILTRO_FECHA_FIN = "";
+
+function renderModuloPedidos() {
+    const esAdmin = SESION.esAdmin === true;
+    const esKAM = SESION.perfil === "KAM Logístico";
+    const esPlanificador = SESION.perfil === "Planificador";
+    const puedeCrear = esKAM || esAdmin;
+    const puedeEditarEste = puedeCrear;
+    const puedeElim = puedeCrear;
+    const container = document.getElementById("modulosContainer");
+
+    container.innerHTML = `
+        ${puedeCrear ? `
+        <section class="glass-panel bg-white/70 dark:bg-pgs-card/60 border border-white/30 dark:border-white/10 rounded-2xl p-6 shadow-2xl relative overflow-hidden mb-8 transition-all duration-300">
+            <div class="absolute top-0 left-0 w-full h-1.5 bg-sky-700 dark:bg-gradient-to-r dark:from-pgs-cyan dark:to-pgs-neon"></div>
+            <div class="flex items-center gap-3 mb-6">
+                <div class="p-2.5 bg-sky-100 dark:bg-pgs-cyan/10 rounded-xl text-sky-800 dark:text-pgs-cyan border border-sky-300 dark:border-sky-500/20"><i data-lucide="clipboard-list" class="w-6 h-6"></i></div>
+                <div>
+                    <h2 id="pedFormTitle" class="text-base font-bold text-slate-900 dark:text-white">Ingreso de Nuevo Pedido</h2>
+                    <p class="text-xs text-slate-600 dark:text-slate-400">Un pedido puede tener varios SKUs. Los códigos se generan al guardar.</p>
+                </div>
+                <button id="pedCancelBtn" onclick="cancelarPedido()" class="hidden ml-auto text-xs text-rose-600 dark:text-rose-400 font-bold hover:underline flex items-center gap-1">
+                    <i data-lucide="x-circle" class="w-4 h-4"></i> Cancelar
+                </button>
+            </div>
+
+            <form id="pedForm" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div><label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Pedido (auto)</label>
+                    <input type="text" id="f_pedido" readonly placeholder="Se genera al guardar" class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-500 dark:text-slate-400"></div>
+                <div><label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Num Pedido (auto)</label>
+                    <input type="text" id="f_num_pedido" readonly placeholder="Se genera al guardar" class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-mono font-bold text-slate-500 dark:text-slate-400"></div>
+                <div><label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Empresa *</label>
+                    ${esAdmin 
+                      ? `<select id="f_empresa" required onchange="filtrarPorEmpresa()" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold">
+                            <option value="">Seleccionar...</option>
+                         </select>`
+                      : `<input type="text" id="f_empresa" readonly value="${SESION.empresa}" class="w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400">`}
+                </div>
+                <div><label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Destinatario *</label>
+                    <select id="f_destinatario" required class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold">
+                        <option value="">Seleccionar empresa primero...</option>
+                    </select></div>
+                <div><label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Fecha Preferida Entrega *</label>
+                    <input type="date" id="f_fecha_preferida_entrega" required class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold"></div>
+                <div><label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Hora Entrega</label>
+                    <input type="time" id="f_hora_entrega" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold"></div>
+                <div><label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Urgencia</label>
+                    <select id="f_urgencia" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold">
+                        <option>Alta</option><option>Media</option><option>Baja</option>
+                    </select></div>
+                <div><label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Prioridad</label>
+                    <input type="number" id="f_prioridad" placeholder="1" value="1" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold"></div>
+                <div class="lg:col-span-4">
+                    <div class="flex items-center justify-between mb-2">
+                        <label class="block text-xs font-bold text-slate-800 dark:text-slate-300">SKUs del Pedido *</label>
+                        <button type="button" onclick="agregarLineaSKU()" class="text-xs bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg flex items-center gap-1">
+                            <i data-lucide="plus" class="w-3 h-3"></i> Agregar SKU
+                        </button>
+                    </div>
+                    <div id="lineasSKU" class="space-y-2"></div>
+                </div>
+                <div class="lg:col-span-4"><label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Observaciones</label>
+                    <textarea id="f_observaciones" rows="2" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold"></textarea></div>
+                <div class="lg:col-span-4 flex justify-end">
+                    <button type="submit" class="bg-slate-900 dark:bg-gradient-to-r dark:from-pgs-cyan dark:to-pgs-neon text-white dark:text-slate-950 font-black py-2.5 px-6 rounded-xl text-xs uppercase tracking-wider flex items-center gap-2 shadow-md cursor-pointer">
+                        <i data-lucide="save" class="w-4 h-4"></i><span>Guardar Pedido</span>
+                    </button>
+                </div>
+            </form>
+        </section>` : ""}
+
+        <section class="glass-panel bg-white/70 dark:bg-pgs-card/60 border border-white/30 dark:border-white/10 rounded-2xl shadow-2xl overflow-hidden transition-all duration-300">
+            <div class="p-6 border-b border-slate-300 dark:border-pgs-border flex flex-col xl:flex-row gap-4 items-start xl:items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="p-2.5 bg-emerald-100 dark:bg-emerald-500/10 rounded-xl text-emerald-800 dark:text-pgs-cyan"><i data-lucide="database" class="w-5 h-5"></i></div>
+                    <div><h3 class="font-bold text-slate-900 dark:text-white text-base">Pedidos</h3>
+                        <p class="text-xs text-slate-600 dark:text-slate-400"><span id="pedTotal" class="font-bold text-sky-700 dark:text-pgs-cyan">0</span> pedidos agrupados</p></div>
+                </div>
+                
+                <div class="flex flex-col md:flex-row gap-2 w-full xl:w-auto flex-wrap">
+                    ${esAdmin ? `
+                    <select id="pedFiltroEmpresa" onchange="aplicarFiltrosPedidos()" class="bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold w-full md:w-auto">
+                        <option value="">Todas las empresas</option>
+                    </select>` : ""}
+                    
+                    <select id="pedFiltroEstado" onchange="aplicarFiltrosPedidos()" class="bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold w-full md:w-auto">
+                        <option value="">Todos los estados</option>
+                        <option value="Pendiente">Pendiente</option>
+                        <option value="Aprobado">Aprobado</option>
+                        <option value="En producción">En producción</option>
+                        <option value="En inventario PT">En inventario PT</option>
+                        <option value="Despachado">Despachado</option>
+                        <option value="Finalizado">Finalizado</option>
+                        <option value="Cancelado">Cancelado</option>
+                    </select>
+
+                    <select id="pedFiltroUrgencia" onchange="aplicarFiltrosPedidos()" class="bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold w-full md:w-auto">
+                        <option value="">Todas las urgencias</option>
+                        <option value="Alta">Alta</option>
+                        <option value="Media">Media</option>
+                        <option value="Baja">Baja</option>
+                    </select>
+
+                    <div class="flex items-center gap-1 w-full md:w-auto bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-2 py-1">
+                        <span class="text-[10px] text-slate-500 font-bold uppercase px-1">Desde</span>
+                        <input type="date" id="pedFiltroFechaInicio" onchange="aplicarFiltrosPedidos()" class="bg-transparent text-xs font-semibold focus:outline-none w-28 dark:text-slate-200">
+                        <span class="text-[10px] text-slate-500 font-bold uppercase px-1">Hasta</span>
+                        <input type="date" id="pedFiltroFechaFin" onchange="aplicarFiltrosPedidos()" class="bg-transparent text-xs font-semibold focus:outline-none w-28 dark:text-slate-200">
+                        <button onclick="limpiarFiltrosFecha()" title="Limpiar fechas" class="p-1 hover:bg-slate-200 dark:hover:bg-slate-700 rounded text-slate-500"><i data-lucide="x" class="w-3 h-3"></i></button>
+                    </div>
+
+                    <input type="text" id="pedSearch" onkeyup="aplicarFiltrosPedidos()" placeholder="Buscar pedido, cliente..." class="flex-1 md:w-56 bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-4 py-2 text-xs font-semibold w-full">
+                </div>
+            </div>
+
+            <div class="overflow-x-auto max-h-[600px]">
+                <table class="w-full text-left text-xs">
+                    <thead class="bg-slate-200/50 dark:bg-slate-900/50 backdrop-blur-lg sticky top-0 text-slate-700 dark:text-slate-400 font-black uppercase tracking-wider z-10">
+                        <tr>
+                            <th class="p-4"></th>
+                            <th class="p-4">Pedido</th>
+                            <th class="p-4">Num</th>
+                            ${esAdmin ? '<th class="p-4">Empresa</th>' : ''}
+                            <th class="p-4">Destinatario</th>
+                            <th class="p-4">Fecha Pref.</th>
+                            <th class="p-4">Urgencia</th>
+                            <th class="p-4">SKUs</th>
+                            <th class="p-4">Estado</th>
+                            <th class="p-4">Prod.</th>
+                            <th class="p-4 text-center">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody id="pedTableBody"></tbody>
+                </table>
+            </div>
+        </section>
+    `;
+    lucide.createIcons();
+
+    document.getElementById("pedForm")?.addEventListener("submit", guardarPedido);
+
+    cargarCatalogosPedidos();
+    cargarPedidos();
+}
+
+function cargarCatalogosPedidos() {
+    if (typeof google === "undefined" || !google.script) return;
+    
+    const esAdmin = SESION.esAdmin === true;
+
+    google.script.run.withSuccessHandler(empresas => {
+        CATALOGO_EMPRESAS = empresas || [];
+        const select = document.getElementById("f_empresa");
+        
+        if (esAdmin && select && select.tagName === "SELECT") {
+            CATALOGO_EMPRESAS.forEach(e => {
+                const opt = document.createElement("option");
+                opt.value = e.codigo_empresa;
+                opt.textContent = e.razon_social;
+                select.appendChild(opt);
+            });
+        }
+
+        if (!esAdmin && SESION.empresa) {
+            cargarDestinatariosYSKUs(SESION.empresa);
+        }
+
+        const filtroSelect = document.getElementById("pedFiltroEmpresa");
+        if (esAdmin && filtroSelect) {
+            CATALOGO_EMPRESAS.forEach(e => {
+                const opt = document.createElement("option");
+                opt.value = e.codigo_empresa;
+                opt.textContent = e.razon_social;
+                filtroSelect.appendChild(opt);
+            });
+        }
+    }).obtenerEmpresasDesdeSheets(SESION.cedula);
+}
+
+function filtrarPorEmpresa() {
+    const select = document.getElementById("f_empresa");
+    if (!select) return;
+    const empresa = select.value;
+    if (!empresa) return;
+    cargarDestinatariosYSKUs(empresa);
+}
+
+function cargarDestinatariosYSKUs(empresa) {
+    if (typeof google === "undefined" || !google.script) return;
+
+    google.script.run.withSuccessHandler(destinatarios => {
+        CATALOGO_DESTINATARIOS = destinatarios || [];
+        const select = document.getElementById("f_destinatario");
+        if (select) {
+            select.innerHTML = '<option value="">Seleccionar...</option>';
+            CATALOGO_DESTINATARIOS.forEach(d => {
+                const opt = document.createElement("option");
+                opt.value = d.cod_destinatario;
+                opt.textContent = d.nombre_destinatario;
+                select.appendChild(opt);
+            });
+        }
+    }).obtenerDestinatariosDesdeSheets(empresa);
+
+    google.script.run.withSuccessHandler(skus => {
+        CATALOGO_SKUS = skus || [];
+    }).obtenerSKUsDesdeSheets(empresa);
+}
+
+function agregarLineaSKU() {
+    const container = document.getElementById("lineasSKU");
+    const div = document.createElement("div");
+    div.className = "grid grid-cols-12 gap-2 items-center bg-slate-50 dark:bg-slate-900 p-3 rounded-xl border border-slate-300 dark:border-pgs-border";
+    div.innerHTML = `
+        <div class="col-span-4">
+            <select class="sku-select w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-pgs-border rounded-lg px-2 py-1.5 text-xs font-semibold">
+                <option value="">Seleccionar SKU...</option>
+                ${CATALOGO_SKUS.map(s => `<option value="${s.codigo_sku}" data-desc="${s.descripcion_sku}">${s.codigo_sku} - ${s.descripcion_sku}</option>`).join("")}
+            </select>
+        </div>
+        <div class="col-span-3">
+            <input type="text" class="desc-input w-full bg-slate-100 dark:bg-slate-800 border border-slate-300 dark:border-pgs-border rounded-lg px-2 py-1.5 text-xs" readonly placeholder="Descripción">
+        </div>
+        <div class="col-span-2">
+            <input type="number" class="cant-input w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-pgs-border rounded-lg px-2 py-1.5 text-xs font-semibold" placeholder="Cantidad">
+        </div>
+        <div class="col-span-2">
+            <input type="text" class="obs-input w-full bg-white dark:bg-slate-800 border border-slate-300 dark:border-pgs-border rounded-lg px-2 py-1.5 text-xs" placeholder="Observación">
+        </div>
+        <div class="col-span-1 text-center">
+            <button type="button" onclick="this.closest('div.grid').remove()" class="p-1.5 hover:bg-rose-100 dark:hover:bg-rose-500/10 text-rose-600 rounded-lg">
+                <i data-lucide="trash-2" class="w-4 h-4"></i>
+            </button>
+        </div>
+    `;
+    container.appendChild(div);
+    lucide.createIcons();
+
+    div.querySelector(".sku-select").addEventListener("change", function() {
+        const opt = this.options[this.selectedIndex];
+        div.querySelector(".desc-input").value = opt.dataset.desc || "";
+    });
+}
+
+function cargarPedidos() {
+    if (typeof google === "undefined" || !google.script) {
+        renderTablaPedidos([]);
+        return;
+    }
+    google.script.run.withSuccessHandler(datos => {
+        PEDIDOS = datos || [];
+        PEDIDOS_AGRUPADOS = agruparPorPedido(PEDIDOS);
+        
+        google.script.run.withSuccessHandler(estados => {
+            ESTADOS_DERIVADOS = estados || {};
+            aplicarFiltrosPedidos();
+        }).withFailureHandler(err => {
+            ESTADOS_DERIVADOS = {};
+            aplicarFiltrosPedidos();
+        }).obtenerEstadosDerivados(SESION.cedula);
+        
+    }).withFailureHandler(err => mostrarAlerta("Error: " + err.message, true))
+      .obtenerPedidosDesdeSheets(SESION.cedula);
+}
+
+function agruparPorPedido(filas) {
+    const mapa = {};
+    filas.forEach(f => {
+        const key = f.pedido;
+        if (!mapa[key]) {
+            mapa[key] = {
+                pedido: f.pedido,
+                num_pedido: f.num_pedido,
+                empresa: f.empresa,
+                destinatario: f.destinatario,
+                fecha_preferida_entrega: f.fecha_preferida_entrega,
+                hora_entrega: f.hora_entrega,
+                urgencia: f.urgencia,
+                prioridad: f.prioridad,
+                estado_pedido: f.estado_pedido,
+                observaciones: f.observaciones,
+                ultimo_proceso: f.ultimo_proceso, // <-- NUEVO
+                lineas: []
+            };
+        }
+        mapa[key].lineas.push({
+            id_pedido_consecutivo: f.id_pedido_consecutivo,
+            sku: f.sku,
+            descripcion_sku: f.descripcion_sku,
+            cantidad_solicitada: f.cantidad_solicitada,
+            observaciones: f.observaciones
+        });
+    });
+    return Object.values(mapa);
+}
+
+function togglePedido(pedidoCod) {
+    if (PEDIDOS_EXPANDIDOS.has(pedidoCod)) PEDIDOS_EXPANDIDOS.delete(pedidoCod);
+    else PEDIDOS_EXPANDIDOS.add(pedidoCod);
+    aplicarFiltrosPedidos();
+}
+
+function renderTablaPedidos(datos) {
+    const tbody = document.getElementById("pedTableBody");
+    if (!tbody) return;
+    
+    document.getElementById("pedTotal").innerText = datos.length;
+    tbody.innerHTML = "";
+
+    const esAdmin = SESION.esAdmin === true;
+    const esKAM = SESION.perfil === "KAM Logístico";
+    const esPlanificador = SESION.perfil === "Planificador";
+    const puedeEditarEste = esKAM || esAdmin;
+    const puedeElim = esKAM || esAdmin;
+
+    if (!datos || datos.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="${esAdmin ? 11 : 10}" class="text-center py-10 text-slate-500 font-bold">No hay pedidos que coincidan con los filtros</td></tr>`;
+        return;
+    }
+
+    datos.forEach(p => {
+        const expandido = PEDIDOS_EXPANDIDOS.has(p.pedido);
+        const numSKUs = p.lineas.length;
+        const estadoDerivado = ESTADOS_DERIVADOS[p.pedido] || "";
+        
+        const acciones = [];
+        
+        if ((esPlanificador || esAdmin) && p.estado_pedido === "Pendiente") {
+            acciones.push(`<button onclick="abrirModalAprobar('${p.pedido}')" title="Aprobar" class="p-1.5 hover:bg-emerald-100 dark:hover:bg-emerald-500/10 text-emerald-600 rounded-lg mr-1"><i data-lucide="check-circle" class="w-4 h-4"></i></button>`);
+        }
+        
+        if (puedeEditarEste && p.estado_pedido === "Pendiente") {
+            acciones.push(`<button onclick="abrirModalEditar('${p.pedido}')" title="Editar" class="p-1.5 hover:bg-sky-100 dark:hover:bg-sky-500/10 text-sky-800 dark:text-pgs-cyan rounded-lg mr-1"><i data-lucide="edit-3" class="w-4 h-4"></i></button>`);
+        }
+        
+        if ((esKAM || esAdmin) && (estadoDerivado === "En inventario PT" || p.estado_pedido === "En inventario PT")) {
+            acciones.push(`<button onclick="abrirModalDespachar('${p.pedido}')" title="Despachar" class="p-1.5 hover:bg-cyan-100 dark:hover:bg-cyan-500/10 text-cyan-600 rounded-lg mr-1"><i data-lucide="truck" class="w-4 h-4"></i></button>`);
+        }
+        
+        if ((esKAM || esAdmin) && p.estado_pedido === "Despachado") {
+            acciones.push(`<button onclick="abrirModalFinalizar('${p.pedido}')" title="Finalizar" class="p-1.5 hover:bg-emerald-100 dark:hover:bg-emerald-500/10 text-emerald-600 rounded-lg mr-1"><i data-lucide="flag" class="w-4 h-4"></i></button>`);
+        }
+        
+        if ((esKAM || esAdmin) && p.estado_pedido !== "Finalizado" && p.estado_pedido !== "Cancelado") {
+            acciones.push(`<button onclick="abrirModalCancelar('${p.pedido}')" title="Cancelar" class="p-1.5 hover:bg-rose-100 dark:hover:bg-rose-500/10 text-rose-600 rounded-lg"><i data-lucide="x-circle" class="w-4 h-4"></i></button>`);
+        }
+
+        const tr = document.createElement("tr");
+        tr.className = "hover:bg-slate-100 dark:hover:bg-slate-800/50 border-b border-slate-200 dark:border-pgs-border/40 transition-colors";
+        tr.innerHTML = `
+            <td class="p-4 cursor-pointer" onclick="togglePedido('${p.pedido}')">
+                <i data-lucide="${expandido ? 'chevron-down' : 'chevron-right'}" class="w-4 h-4 text-sky-700 dark:text-pgs-cyan"></i>
+            </td>
+            <td class="p-4 font-mono font-bold text-sky-800 dark:text-pgs-cyan">${p.pedido}</td>
+            <td class="p-4 font-mono">${p.num_pedido}</td>
+            ${esAdmin ? `<td class="p-4 font-mono text-slate-600 dark:text-slate-400">${p.empresa}</td>` : ''}
+            <td class="p-4 font-bold text-slate-900 dark:text-white">${p.destinatario}</td>
+            <td class="p-4">${p.fecha_preferida_entrega || '-'}</td>
+            <td class="p-4">${getBadgeUrgencia(p.urgencia)}</td>
+            <td class="p-4"><span class="bg-slate-200 dark:bg-slate-800 px-2 py-1 rounded text-[11px] font-bold">${numSKUs} SKU${numSKUs > 1 ? 's' : ''}</span></td>
+            <td class="p-4">${getBadgeEstado(p.estado_pedido)}</td>
+            <td class="p-4">
+                ${estadoDerivado ? getBadgeEstadoDerivado(estadoDerivado) : '<span class="text-slate-400 text-[10px]">—</span>'}
+                ${p.ultimo_proceso ? `<div class="text-[9px] text-sky-600 dark:text-sky-400 font-bold mt-1">Paso: ${p.ultimo_proceso}</div>` : ''}
+            </td>
+            <td class="p-4 text-center">${acciones.join('') || '<span class="text-slate-400 text-[10px]">—</span>'}</td>
+        `;
+        tbody.appendChild(tr);
+
+        if (expandido) {
+            p.lineas.forEach(l => {
+                const trL = document.createElement("tr");
+                trL.className = "bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-200 dark:border-pgs-border/20";
+                trL.innerHTML = `
+                    <td></td>
+                    <td colspan="${esAdmin ? 10 : 9}" class="p-3 pl-12">
+                        <div class="flex items-center gap-4 text-xs flex-wrap">
+                            <span class="font-mono text-slate-500 dark:text-slate-400">${l.id_pedido_consecutivo}</span>
+                            <span class="font-mono font-bold text-sky-700 dark:text-pgs-cyan">${l.sku}</span>
+                            <span class="font-bold text-slate-900 dark:text-white">${l.descripcion_sku}</span>
+                            <span class="bg-slate-200 dark:bg-slate-800 px-2 py-0.5 rounded font-bold">${l.cantidad_solicitada}</span>
+                            <span class="text-slate-500 dark:text-slate-400">${l.observaciones || ''}</span>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(trL);
+            });
+        }
+    });
+    lucide.createIcons();
+}
+
+function getBadgeUrgencia(urgencia) {
+    if (urgencia === 'Alta') return '<span class="px-2 py-1 rounded text-[10px] font-black bg-rose-100 dark:bg-rose-500/10 text-rose-800 dark:text-rose-400">Alta</span>';
+    if (urgencia === 'Media') return '<span class="px-2 py-1 rounded text-[10px] font-black bg-amber-100 dark:bg-amber-500/10 text-amber-800 dark:text-amber-400">Media</span>';
+    return '<span class="px-2 py-1 rounded text-[10px] font-black bg-emerald-100 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-400">Baja</span>';
+}
+
+function getBadgeEstado(estado) {
+    const colores = {
+        "Pendiente":     "bg-amber-100 dark:bg-amber-500/10 text-amber-800 dark:text-amber-400",
+        "Aprobado":      "bg-sky-100 dark:bg-sky-500/10 text-sky-800 dark:text-sky-400",
+        "En producción": "bg-orange-100 dark:bg-orange-500/10 text-orange-800 dark:text-orange-400",
+        "En inventario PT": "bg-purple-100 dark:bg-purple-500/10 text-purple-800 dark:text-purple-400",
+        "Despachado":    "bg-cyan-100 dark:bg-cyan-500/10 text-cyan-800 dark:text-cyan-400",
+        "Finalizado":    "bg-emerald-100 dark:bg-emerald-500/10 text-emerald-800 dark:text-emerald-400",
+        "Cancelado":     "bg-rose-100 dark:bg-rose-500/10 text-rose-800 dark:text-rose-400"
+    };
+    const clase = colores[estado] || "bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300";
+    return `<span class="px-2 py-1 rounded text-[10px] font-black ${clase}">${estado || '-'}</span>`;
+}
+
+function getBadgeEstadoDerivado(estado) {
+    const colores = {
+        "En producción":   "bg-orange-100 dark:bg-orange-500/10 text-orange-800 dark:text-orange-400",
+        "En inventario PT":"bg-purple-100 dark:bg-purple-500/10 text-purple-800 dark:text-purple-400"
+    };
+    const clase = colores[estado] || "bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300";
+    return `<span class="px-2 py-1 rounded text-[10px] font-black ${clase}">${estado}</span>`;
+}
+
+function abrirModalAprobar(pedidoCod) {
+    const overlay = document.createElement("div");
+    overlay.className = "fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4";
+    overlay.innerHTML = `
+        <div class="glass-panel bg-white/90 dark:bg-pgs-card/90 border border-sky-300/50 dark:border-pgs-cyan/30 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div class="flex items-center gap-3">
+                <div class="p-3 bg-emerald-100 dark:bg-emerald-500/10 rounded-xl border border-emerald-300 dark:border-emerald-500/30">
+                    <i data-lucide="check-circle" class="w-6 h-6 text-emerald-600 dark:text-emerald-400"></i>
+                </div>
+                <div>
+                    <h4 class="text-base font-bold text-slate-900 dark:text-white">Aprobar Pedido</h4>
+                    <p class="text-[11px] text-slate-500 dark:text-slate-400">Pedido: ${pedidoCod}</p>
+                </div>
+            </div>
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Fecha Entrega Planta *</label>
+                    <input type="date" id="aprob_fecha" required class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Prioridad</label>
+                    <input type="number" id="aprob_prioridad" value="1" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold">
+                </div>
+            </div>
+            <div class="flex items-center justify-end gap-3 pt-2">
+                <button onclick="this.closest('.fixed').remove()" class="px-4 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-bold transition">Cancelar</button>
+                <button onclick="confirmarAprobar('${pedidoCod}')" class="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition flex items-center gap-2 shadow-md">
+                    <i data-lucide="check" class="w-4 h-4"></i> Aprobar
+                </button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+    lucide.createIcons();
+}
+
+function confirmarAprobar(pedidoCod) {
+    const fecha = document.getElementById("aprob_fecha").value;
+    const prioridad = document.getElementById("aprob_prioridad").value;
+    
+    if (!fecha) return mostrarAlerta("La fecha es obligatoria", true);
+
+    google.script.run
+        .withSuccessHandler(res => {
+            if (!res.ok) return mostrarAlerta(res.error, true);
+            document.querySelector(".fixed.z-50")?.remove();
+            cargarPedidos();
+            mostrarAlerta(res.mensaje);
+        })
+        .withFailureHandler(err => mostrarAlerta("Error: " + err.message, true))
+        .aprobarPedidoDesdeProgramacion(pedidoCod, fecha, prioridad, "", SESION.cedula);
+}
+
+function abrirModalEditar(pedidoCod) {
+    const pedido = PEDIDOS_AGRUPADOS.find(p => p.pedido === pedidoCod);
+    if (!pedido) return mostrarAlerta("Pedido no encontrado", true);
+
+    const overlay = document.createElement("div");
+    overlay.className = "fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto";
+    overlay.innerHTML = `
+        <div class="glass-panel bg-white/90 dark:bg-pgs-card/90 border border-sky-300/50 dark:border-pgs-cyan/30 rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 my-8">
+            <div class="flex items-center gap-3">
+                <div class="p-3 bg-sky-100 dark:bg-sky-500/10 rounded-xl border border-sky-300 dark:border-sky-500/30">
+                    <i data-lucide="edit-3" class="w-6 h-6 text-sky-600 dark:text-sky-400"></i>
+                </div>
+                <div>
+                    <h4 class="text-base font-bold text-slate-900 dark:text-white">Editar Pedido</h4>
+                    <p class="text-[11px] text-slate-500 dark:text-slate-400">Pedido: ${pedidoCod}</p>
+                </div>
+            </div>
+            <div class="space-y-3">
+                <div>
+                    <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Destinatario</label>
+                    <select id="edit_destinatario" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold">
+                        ${CATALOGO_DESTINATARIOS.map(d => `<option value="${d.cod_destinatario}" ${d.cod_destinatario === pedido.destinatario ? 'selected' : ''}>${d.nombre_destinatario}</option>`).join("")}
+                    </select>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Fecha Preferida Entrega</label>
+                        <input type="date" id="edit_fecha" value="${pedido.fecha_preferida_entrega}" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Hora Entrega</label>
+                        <input type="time" id="edit_hora" value="${pedido.hora_entrega || ''}" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold">
+                    </div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Urgencia</label>
+                        <select id="edit_urgencia" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold">
+                            <option ${pedido.urgencia === 'Alta' ? 'selected' : ''}>Alta</option>
+                            <option ${pedido.urgencia === 'Media' ? 'selected' : ''}>Media</option>
+                            <option ${pedido.urgencia === 'Baja' ? 'selected' : ''}>Baja</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Prioridad</label>
+                        <input type="number" id="edit_prioridad" value="${pedido.prioridad || '1'}" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Observaciones</label>
+                    <textarea id="edit_obs" rows="2" class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold">${pedido.observaciones || ''}</textarea>
+                </div>
+                <div class="p-3 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/30 rounded-xl text-amber-800 dark:text-amber-400 text-xs font-bold flex items-center gap-2">
+                    <i data-lucide="info" class="w-4 h-4"></i>
+                    Los SKUs y cantidades NO se pueden editar.
+                </div>
+            </div>
+            <div class="flex items-center justify-end gap-3 pt-2">
+                <button onclick="this.closest('.fixed').remove()" class="px-4 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-bold transition">Cancelar</button>
+                <button onclick="confirmarEditar('${pedidoCod}')" class="px-4 py-2.5 bg-sky-600 hover:bg-sky-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition flex items-center gap-2 shadow-md">
+                    <i data-lucide="save" class="w-4 h-4"></i> Guardar
+                </button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+    lucide.createIcons();
+}
+
+function confirmarEditar(pedidoCod) {
+    const datos = {
+        destinatario: document.getElementById("edit_destinatario").value,
+        fecha_preferida_entrega: document.getElementById("edit_fecha").value,
+        hora_entrega: document.getElementById("edit_hora").value,
+        urgencia: document.getElementById("edit_urgencia").value,
+        prioridad: document.getElementById("edit_prioridad").value,
+        observaciones: document.getElementById("edit_obs").value
+    };
+
+    google.script.run
+        .withSuccessHandler(res => {
+            if (!res.ok) return mostrarAlerta(res.error, true);
+            document.querySelector(".fixed.z-50")?.remove();
+            cargarPedidos();
+            mostrarAlerta(res.mensaje);
+        })
+        .withFailureHandler(err => mostrarAlerta("Error: " + err.message, true))
+        .editarPedidoCompleto(pedidoCod, datos, SESION.cedula);
+}
+
+function abrirModalDespachar(pedidoCod) {
+    confirmar(`¿Marcar el pedido <b>${pedidoCod}</b> como DESPACHADO?<br><br>Asegúrate de que todo el inventario esté listo.`, () => {
+        google.script.run
+            .withSuccessHandler(res => {
+                if (!res.ok) return mostrarAlerta(res.error, true);
+                cargarPedidos();
+                mostrarAlerta(res.mensaje);
+            })
+            .withFailureHandler(err => mostrarAlerta("Error: " + err.message, true))
+            .despacharPedido(pedidoCod, SESION.cedula);
+    });
+}
+
+function abrirModalFinalizar(pedidoCod) {
+    confirmar(`¿Marcar el pedido <b>${pedidoCod}</b> como FINALIZADO?<br><br>El cliente ya debe haber confirmado la recepción.`, () => {
+        google.script.run
+            .withSuccessHandler(res => {
+                if (!res.ok) return mostrarAlerta(res.error, true);
+                cargarPedidos();
+                mostrarAlerta(res.mensaje);
+            })
+            .withFailureHandler(err => mostrarAlerta("Error: " + err.message, true))
+            .finalizarPedido(pedidoCod, SESION.cedula);
+    });
+}
+
+function abrirModalCancelar(pedidoCod) {
+    const overlay = document.createElement("div");
+    overlay.className = "fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4";
+    overlay.innerHTML = `
+        <div class="glass-panel bg-white/90 dark:bg-pgs-card/90 border border-rose-300/50 dark:border-rose-500/30 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div class="flex items-center gap-3">
+                <div class="p-3 bg-rose-100 dark:bg-rose-500/10 rounded-xl border border-rose-300 dark:border-rose-500/30">
+                    <i data-lucide="alert-triangle" class="w-6 h-6 text-rose-600 dark:text-rose-400"></i>
+                </div>
+                <div>
+                    <h4 class="text-base font-bold text-slate-900 dark:text-white">Cancelar Pedido</h4>
+                    <p class="text-[11px] text-slate-500 dark:text-slate-400">Pedido: ${pedidoCod}</p>
+                </div>
+            </div>
+            <div class="p-3 bg-rose-50 dark:bg-rose-500/10 border border-rose-200 dark:border-rose-500/30 rounded-xl text-rose-800 dark:text-rose-400 text-xs font-bold flex items-center gap-2">
+                <i data-lucide="info" class="w-4 h-4"></i>
+                Esta acción no se puede deshacer.
+            </div>
+            <div>
+                <label class="block text-xs font-bold text-slate-800 dark:text-slate-300 mb-1">Motivo de cancelación *</label>
+                <textarea id="cancel_motivo" rows="3" required placeholder="Ej: Cliente canceló el pedido, error en la cantidad, etc." class="w-full bg-slate-50 dark:bg-slate-900 border border-slate-300 dark:border-pgs-border rounded-xl px-3 py-2 text-xs font-semibold"></textarea>
+            </div>
+            <div class="flex items-center justify-end gap-3 pt-2">
+                <button onclick="this.closest('.fixed').remove()" class="px-4 py-2.5 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-xl text-xs font-bold transition">Volver</button>
+                <button onclick="confirmarCancelar('${pedidoCod}')" class="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-black uppercase tracking-wider transition flex items-center gap-2 shadow-md">
+                    <i data-lucide="x-circle" class="w-4 h-4"></i> Cancelar Pedido
+                </button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+    lucide.createIcons();
+}
+
+function confirmarCancelar(pedidoCod) {
+    const motivo = document.getElementById("cancel_motivo").value.trim();
+    if (!motivo) return mostrarAlerta("El motivo es obligatorio", true);
+
+    google.script.run
+        .withSuccessHandler(res => {
+            if (!res.ok) return mostrarAlerta(res.error, true);
+            document.querySelector(".fixed.z-50")?.remove();
+            cargarPedidos();
+            mostrarAlerta(res.mensaje);
+        })
+        .withFailureHandler(err => mostrarAlerta("Error: " + err.message, true))
+        .cancelarPedido(pedidoCod, motivo, SESION.cedula);
+}
+
+function guardarPedido(e) {
+    e.preventDefault();
+
+    const esAdmin = SESION.esAdmin === true;
+    const empresaInput = document.getElementById("f_empresa");
+    const empresa = esAdmin ? empresaInput.value : SESION.empresa;
+    const destinatario = document.getElementById("f_destinatario").value;
+    const fechaPref = document.getElementById("f_fecha_preferida_entrega").value;
+    const horaEntrega = document.getElementById("f_hora_entrega").value;
+    const urgencia = document.getElementById("f_urgencia").value;
+    const prioridad = document.getElementById("f_prioridad").value;
+    const observaciones = document.getElementById("f_observaciones").value;
+
+    if (!empresa || !destinatario || !fechaPref) {
+        return mostrarAlerta("Complete empresa, destinatario y fecha", true);
+    }
+
+    const lineas = [];
+    const skusAgregados = new Set(); 
+    let hayDuplicados = false;       
+
+    document.querySelectorAll("#lineasSKU > div").forEach(div => {
+        const sku = div.querySelector(".sku-select").value;
+        const desc = div.querySelector(".desc-input").value;
+        const cant = div.querySelector(".cant-input").value;
+        const obs = div.querySelector(".obs-input").value;
+
+        if (sku && cant) {
+            if (skusAgregados.has(sku)) { hayDuplicados = true; }
+            skusAgregados.add(sku);
+            lineas.push({ sku: sku, descripcion_sku: desc, cantidad: cant, observacion: obs });
+        }
+    });
+
+    if (hayDuplicados) return mostrarAlerta("No puedes agregar el mismo SKU dos veces.", true);
+    if (lineas.length === 0) return mostrarAlerta("Agregue al menos un SKU con cantidad", true);
+
+    const datos = { empresa, destinatario, fecha_preferida_entrega: fechaPref, hora_entrega: horaEntrega, urgencia, prioridad, observaciones, lineas };
+
+    mostrarAlerta("Guardando pedido...", false);
+
+    google.script.run
+        .withSuccessHandler(res => {
+            if (!res.ok) return mostrarAlerta(res.error, true);
+            cancelarPedido();
+            cargarPedidos();
+            mostrarModalExito(res.pedido, res.numPedido, res.numLineas);
+        })
+        .withFailureHandler(err => mostrarAlerta("Error: " + err.message, true))
+        .crearPedidoCompleto(datos, SESION.cedula);
+}
+
+function mostrarModalExito(pedido, numPedido, numLineas) {
+    const overlay = document.createElement("div");
+    overlay.className = "fixed inset-0 bg-slate-950/70 backdrop-blur-sm z-50 flex items-center justify-center p-4";
+    overlay.innerHTML = `
+        <div class="glass-panel bg-white/90 dark:bg-pgs-card/90 border border-emerald-300/50 dark:border-emerald-500/30 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
+            <div class="flex items-center gap-3">
+                <div class="p-3 bg-emerald-100 dark:bg-emerald-500/10 rounded-xl border border-emerald-300 dark:border-emerald-500/30">
+                    <i data-lucide="check-circle" class="w-6 h-6 text-emerald-600 dark:text-emerald-400"></i>
+                </div>
+                <div>
+                    <h4 class="text-base font-bold text-slate-900 dark:text-white">Pedido creado</h4>
+                    <p class="text-[11px] text-slate-500 dark:text-slate-400">Guardado exitosamente</p>
+                </div>
+            </div>
+            <div class="space-y-2 text-xs bg-slate-50 dark:bg-slate-900/50 p-4 rounded-xl border border-slate-200 dark:border-pgs-border/50">
+                <div class="flex justify-between"><span class="text-slate-500">Pedido:</span><span class="font-mono font-bold text-sky-700 dark:text-pgs-cyan">${pedido}</span></div>
+                <div class="flex justify-between"><span class="text-slate-500">Num Pedido:</span><span class="font-mono font-bold">${numPedido}</span></div>
+                <div class="flex justify-between"><span class="text-slate-500">SKUs:</span><span class="font-bold">${numLineas}</span></div>
+            </div>
+            <div class="flex justify-end pt-2">
+                <button onclick="this.closest('.fixed').remove()" class="px-4 py-2.5 bg-slate-900 dark:bg-gradient-to-r dark:from-pgs-cyan dark:to-pgs-neon text-white dark:text-slate-950 rounded-xl text-xs font-black uppercase tracking-wider">Aceptar</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+    lucide.createIcons();
+}
+
+function cancelarPedido() {
+    document.getElementById("pedForm").reset();
+    document.getElementById("lineasSKU").innerHTML = "";
+    document.getElementById("f_pedido").value = "";
+    document.getElementById("f_num_pedido").value = "";
+    document.getElementById("pedFormTitle").innerText = "Ingreso de Nuevo Pedido";
+    document.getElementById("pedCancelBtn").classList.add("hidden");
+}
+
+function limpiarFiltrosFecha() {
+    document.getElementById("pedFiltroFechaInicio").value = "";
+    document.getElementById("pedFiltroFechaFin").value = "";
+    aplicarFiltrosPedidos();
+}
+
+function aplicarFiltrosPedidos() {
+    const elEmpresa = document.getElementById("pedFiltroEmpresa");
+    const elEstado = document.getElementById("pedFiltroEstado");
+    const elUrgencia = document.getElementById("pedFiltroUrgencia");
+    const elFechaInicio = document.getElementById("pedFiltroFechaInicio");
+    const elFechaFin = document.getElementById("pedFiltroFechaFin");
+    const elSearch = document.getElementById("pedSearch");
+
+    FILTRO_EMPRESA_TABLA = elEmpresa ? elEmpresa.value : "";
+    FILTRO_ESTADO_TABLA = elEstado ? elEstado.value : "";
+    FILTRO_URGENCIA_TABLA = elUrgencia ? elUrgencia.value : "";
+    FILTRO_FECHA_INICIO = elFechaInicio ? elFechaInicio.value : "";
+    FILTRO_FECHA_FIN = elFechaFin ? elFechaFin.value : "";
+    const query = elSearch ? elSearch.value.toLowerCase() : "";
+
+    let filtrados = PEDIDOS_AGRUPADOS;
+
+    if (SESION.esAdmin && FILTRO_EMPRESA_TABLA) filtrados = filtrados.filter(p => p.empresa === FILTRO_EMPRESA_TABLA);
+    if (FILTRO_ESTADO_TABLA) filtrados = filtrados.filter(p => p.estado_pedido === FILTRO_ESTADO_TABLA);
+    if (FILTRO_URGENCIA_TABLA) filtrados = filtrados.filter(p => p.urgencia === FILTRO_URGENCIA_TABLA);
+
+    if (FILTRO_FECHA_INICIO || FILTRO_FECHA_FIN) {
+        filtrados = filtrados.filter(p => {
+            if (!p.fecha_preferida_entrega || p.fecha_preferida_entrega === "-") return false;
+            const partes = p.fecha_preferida_entrega.split("/");
+            if (partes.length !== 3) return false;
+            const fechaPedidoStr = `${partes[2]}-${partes[1]}-${partes[0]}`;
+            if (FILTRO_FECHA_INICIO && fechaPedidoStr < FILTRO_FECHA_INICIO) return false;
+            if (FILTRO_FECHA_FIN && fechaPedidoStr > FILTRO_FECHA_FIN) return false;
+            return true;
+        });
+    }
+
+    if (query) {
+        filtrados = filtrados.filter(p =>
+            Object.values(p).some(v => String(v).toLowerCase().includes(query)) ||
+            p.lineas.some(l => Object.values(l).some(v => String(v).toLowerCase().includes(query)))
+        );
+    }
+
+    renderTablaPedidos(filtrados);
+}
+</script>
